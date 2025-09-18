@@ -28,3 +28,9 @@ dist/
 build/
 .coverage
 htmlcov/
+
+backend/app/assets/models/
+backend/app/assets/debug/
+backend/app/assets/**/*.tmp
+*.onnx
+*.pt
