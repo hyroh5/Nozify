@@ -1,4 +1,5 @@
 import cv2, os
+import numpy as np
 from app.core.config import VisionConfig
 
 def save_overlay(img, bbox, poly, request_id):

@@ -2,75 +2,63 @@ import cv2, numpy as np, pytesseract
 from typing import List, Dict, Any
 from app.core.config import VisionConfig
 
+def _preprocess(gray):
+    # 대비 보정
+    gray = cv2.convertScaleAbs(gray, alpha=1.3, beta=0)
+    # Otsu 이진화
+    blur = cv2.GaussianBlur(gray, (3,3), 0)
+    _, th = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+    # 글자 연결
+    k = cv2.getStructuringElement(cv2.MORPH_RECT, (3,3))
+    th = cv2.morphologyEx(th, cv2.MORPH_CLOSE, k, iterations=1)
+    return th
 
-def run_ocr(img_bgr: np.ndarray, roi=None) -> List[Dict[str, Any]]:
-    """
-    ROI: (x,y,w,h) 픽셀 좌표 튜플. None이면 전체 이미지.
-    반환: [{'text':str,'confidence':float,'box':{'x':..,'y':..,'w':..,'h':..}}]
-    """
+def _tess(img, psm):
+    langs = VisionConfig.OCR_LANGS.replace(",", "+")
+    config = f"-l {langs} --oem 3 --psm {psm}"
+    return pytesseract.image_to_data(img, config=config, output_type=pytesseract.Output.DICT)
+
+def run_ocr(img_bgr, roi=None) -> List[Dict[str, Any]]:
     h, w = img_bgr.shape[:2]
     if roi:
-        x, y, rw, rh = roi
-        roi_img = img_bgr[y : y + rh, x : x + rw]
+        x,y,rw,rh = roi
+        roi_img = img_bgr[y:y+rh, x:x+rw]
     else:
-        x, y, rw, rh = 0, 0, w, h
+        x,y,rw,rh = 0,0,w,h
         roi_img = img_bgr
 
     gray = cv2.cvtColor(roi_img, cv2.COLOR_BGR2GRAY)
-
-    # 대비/밝기 강화
-    gray = cv2.convertScaleAbs(gray, alpha=2.0, beta=30)
-
-    # 미세 노이즈 억제
-    gray = cv2.bilateralFilter(gray, d=5, sigmaColor=50, sigmaSpace=50)
-
-    # 탑햇으로 밝은 글자 강조
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (15, 15))
-    tophat = cv2.morphologyEx(gray, cv2.MORPH_TOPHAT, kernel)
-
-    # 약한 블러로 노이즈 억제
-    gray = cv2.GaussianBlur(gray, (3, 3), 0)
-    # Otsu 이진화
-    _, gray = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-
-    langs = VisionConfig.OCR_LANGS.replace(",", "+")
-    config = f"-l {langs} --oem 3 --psm 6"
-
-    try:
-        data = pytesseract.image_to_data(
-            gray, config=config, output_type=pytesseract.Output.DICT
-        )
-    except TesseractError as e:
-        print("tesseract error:", e)
-        return []
-
     results = []
-    n = len(data["text"])
-    for i in range(n):
-        # 1) 텍스트 안전 처리
-        raw_text = data["text"][i]
-        txt = ("" if raw_text is None else str(raw_text)).strip()
-        # 2) 신뢰도 타입 안전 처리 (int/float/str 모두 대응)
-        raw_conf = data["conf"][i]
-        try:
-            conf = float(raw_conf) / 100.0
-        except Exception:
-            conf = 0.0
 
-        if not txt or conf < 0.3:
-            continue
+    for scale in (1.0, 1.5, 2.0):
+        g = cv2.resize(gray, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
+        th = _preprocess(g)
+        for psm in (7, 6):
+            data = _tess(th, psm)
+            n = len(data["text"])
+            for i in range(n):
+                txt = ("" if data["text"][i] is None else str(data["text"][i])).strip()
+                try:
+                    conf = float(data["conf"][i]) / 100.0
+                except Exception:
+                    conf = 0.0
+                if not txt or conf < 0.55:  # 조금 올림
+                    continue
 
-        # 3) 박스 좌표도 타입 캐스팅
-        bx = int(data["left"][i])
-        by = int(data["top"][i])
-        bw = int(data["width"][i])
-        bh = int(data["height"][i])
+                bx = int(data["left"][i] / scale); by = int(data["top"][i] / scale)
+                bw2 = int(data["width"][i] / scale); bh2 = int(data["height"][i] / scale)
+                bx += x; by += y
+                box = {"x": bx / w, "y": by / h, "w": bw2 / w, "h": bh2 / h}
+                results.append({"text": txt.upper(), "confidence": conf, "box": box})
 
-        # ROI 원본 좌표계로 보정
-        bx += x
-        by += y
-        box = {"x": bx / w, "y": by / h, "w": bw / w, "h": bh / h}
+        # 이미 충분히 텍스트가 나오면 더 안 키워도 됨
+        if len(results) >= 6:
+            break
 
-        results.append({"text": txt.upper(), "confidence": conf, "box": box})
-
-    return results
+    # 중복 박스/텍스트 간단 정리(같은 문자열 우선순위: 더 높은 conf)
+    dedup = {}
+    for r in results:
+        key = (r["text"], round(r["box"]["x"],3), round(r["box"]["y"],3))
+        if key not in dedup or r["confidence"] > dedup[key]["confidence"]:
+            dedup[key] = r
+    return list(dedup.values())
