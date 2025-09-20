@@ -40,3 +40,4 @@ pillow
 shapely
 rapidfuzz
 pytesseract
+python-multipart
