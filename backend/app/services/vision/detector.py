@@ -43,8 +43,8 @@ class BottleDetector:
                 onnx_path = model_path
                 if onnx_path and os.path.exists(onnx_path):
                     providers = (["CPUExecutionProvider"]
-                                 if device == "cpu"
-                                 else ["CUDAExecutionProvider", "CPUExecutionProvider"])
+                                if device == "cpu"
+                                else ["CUDAExecutionProvider", "CPUExecutionProvider"])
                     print("[BottleDetector] try ONNX:", os.path.abspath(onnx_path))
                     self.session = ort.InferenceSession(onnx_path, providers=providers)
                     self.model_loaded = True
@@ -59,6 +59,8 @@ class BottleDetector:
 
     def detect(self, img_bgr, guide_box: Optional[Dict[str, float]] = None) -> Dict[str, Any]:
         h, w = img_bgr.shape[:2]
+
+        print(f"[LOG][DETECT] 입력 이미지 크기: {img_bgr.shape}")
 
         if not self.ready():
             return {"present": False, "score": 0.0, "mask_polygon": None,
@@ -172,6 +174,8 @@ class BottleDetector:
         return {"present": False, "score": 0.0, "mask_polygon": None,
                 "bbox": {"x": 0, "y": 0, "w": 0, "h": 0},
                 "area_ratio": 0.0, "inside_ratio": 0.0}
+    
+        
 
 
 # 싱글톤
@@ -180,3 +184,5 @@ detector = BottleDetector(
     VisionConfig.DEVICE,
     VisionConfig.THRESH_BOTTLE_SCORE,
 )
+
+

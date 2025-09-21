@@ -6,4 +6,5 @@ def calc_quality(img_bgr):
     brightness = float(np.mean(gray)/255.0)
     # glare: 밝은 픽셀 비율
     glare_ratio = float(np.sum(gray>240)/(gray.size))
+    print(f"[LOG][QUALITY] blur={blur:.2f}, brightness={brightness:.3f}, glare={glare_ratio:.3f}")
     return {"blur": blur, "brightness": brightness, "glare_ratio": glare_ratio}

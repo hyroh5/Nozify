@@ -89,6 +89,7 @@ def match_product(brand_id: str, text_tokens: List[str], user_query_tokens: List
     return results[:3]
 
 def get_match(texts: List[Dict[str,Any]], user_query: str="") -> Dict[str,Any]:
+    print(f"[LOG][MATCH] 입력 텍스트={texts}, user_query={user_query}")
     # OCR 토큰 합치기
     ocr_tokens=[]
     for t in texts:
@@ -113,6 +114,8 @@ def get_match(texts: List[Dict[str,Any]], user_query: str="") -> Dict[str,Any]:
 
     prod_candidates.sort(key=lambda x: (-x["score"], x["product"]))
     final = prod_candidates[0] if (prod_candidates and prod_candidates[0]["score"] >= VisionConfig.THRESH_TEXT_MATCH) else None
+
+    print(f"[LOG][MATCH] 최종 매칭 결과={final}, 후보군={prod_candidates[:3]}")
 
     return {
         "final": final,
