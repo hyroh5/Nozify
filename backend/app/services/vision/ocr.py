@@ -134,6 +134,21 @@ def run_ocr(img_bgr: np.ndarray, roi=None) -> List[Dict[str, Any]]:
             dedup[key] = r
 
     texts = list(dedup.values())
+    # texts = list(dedup.values()) 바로 다음에 추가
+    clean = []
+    for r in texts:
+        t = r["text"]
+        conf = r["confidence"]
+        # 전각/기호/한 글자 위주 제거
+        if conf < 0.60:
+            continue
+        if len(t) <= 1 and t not in {"°"}:
+            continue
+        if all(ch in "|/\\{}[]()-_=+:.!~" for ch in t):
+            continue
+        clean.append(r)
+    texts = clean
+
 
     # 반환 로그
     print(f"[LOG][OCR] OCR 결과: {texts}")
