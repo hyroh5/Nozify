@@ -1,21 +1,43 @@
-import cv2, numpy as np, pytesseract
+# app/services/vision/ocr.py
+import cv2
+import numpy as np
+import pytesseract
 from typing import List, Dict, Any
 from app.core.config import VisionConfig
 
+try:
+    # 일부 환경에선 TesseractError가 필요할 수 있음
+    from pytesseract import TesseractError
+except Exception:  # pragma: no cover
+    TesseractError = Exception
 
-def _preprocess(gray):
+
+def _preprocess(gray: np.ndarray) -> List[np.ndarray]:
+    """
+    입력: 그레이스케일 이미지
+    출력: [정이진화, 역이진화] 두 버전 (모폴로지 후처리 포함)
+    """
     # 대비 보정
     gray = cv2.convertScaleAbs(gray, alpha=1.3, beta=0)
-    # Otsu 이진화
+
+    # 약한 노이즈 제거
     blur = cv2.GaussianBlur(gray, (3, 3), 0)
-    _, th = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    # 글자 연결
+
+    # Otsu 이진화(정/역)
+    _, th_bin = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    _, th_inv = cv2.threshold(
+        blur, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU
+    )
+
+    # 글자 끊김 보완
     k = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
-    th = cv2.morphologyEx(th, cv2.MORPH_CLOSE, k, iterations=1)
-    return th
+    th_bin = cv2.morphologyEx(th_bin, cv2.MORPH_CLOSE, k, iterations=1)
+    th_inv = cv2.morphologyEx(th_inv, cv2.MORPH_CLOSE, k, iterations=1)
+
+    return [th_bin, th_inv]
 
 
-def _tess(img, psm):
+def _tess(img: np.ndarray, psm: int) -> Dict[str, List[Any]]:
     langs = VisionConfig.OCR_LANGS.replace(",", "+")
     config = f"-l {langs} --oem 3 --psm {psm}"
     return pytesseract.image_to_data(
@@ -23,12 +45,19 @@ def _tess(img, psm):
     )
 
 
-def run_ocr(img_bgr, roi=None) -> List[Dict[str, Any]]:
+def run_ocr(img_bgr: np.ndarray, roi=None) -> List[Dict[str, Any]]:
+    """
+    img_bgr: 원본 BGR 이미지
+    roi: (x, y, w, h) 픽셀 좌표. None이면 전체 이미지 사용
+    반환: [{'text':str,'confidence':float,'box':{'x':..,'y':..,'w':..,'h':..}}, ...]
+          box는 정규화 좌표(0~1)
+    """
     h, w = img_bgr.shape[:2]
 
-    # (1) 함수 진입 로그
+    # 진입 로그
     print(f"[LOG][OCR] OCR 시작, ROI={roi if roi else '전체 이미지'}")
 
+    # ROI 잘라내기
     if roi:
         x, y, rw, rh = roi
         roi_img = img_bgr[y : y + rh, x : x + rw]
@@ -37,40 +66,68 @@ def run_ocr(img_bgr, roi=None) -> List[Dict[str, Any]]:
         roi_img = img_bgr
 
     gray = cv2.cvtColor(roi_img, cv2.COLOR_BGR2GRAY)
-    results = []
+    results: List[Dict[str, Any]] = []
 
-    for scale in (1.0, 1.5, 2.0):
+    # 작은 입력 대응: 더 큰 스케일까지 확대 시도
+    scales = (1.0, 1.8, 2.4, 3.0)
+    psms = (7, 6)  # 7: single line, 6: assume a block
+
+    for scale in scales:
+        # 확대
         g = cv2.resize(gray, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
-        th = _preprocess(g)
-        for psm in (7, 6):
-            data = _tess(th, psm)
-            n = len(data["text"])
-            for i in range(n):
-                txt = ("" if data["text"][i] is None else str(data["text"][i])).strip()
+
+        # 정/역 이진화 모두 시도
+        for th in _preprocess(g):
+            for psm in psms:
                 try:
-                    conf = float(data["conf"][i]) / 100.0
-                except Exception:
-                    conf = 0.0
-                if not txt or conf < 0.55:  # 조금 올림
+                    data = _tess(th, psm)
+                except TesseractError as e:  # 안전장치
+                    print("[LOG][OCR] tesseract error:", e)
                     continue
 
-                bx = int(data["left"][i] / scale)
-                by = int(data["top"][i] / scale)
-                bw2 = int(data["width"][i] / scale)
-                bh2 = int(data["height"][i] / scale)
-                bx += x
-                by += y
-                box = {"x": bx / w, "y": by / h, "w": bw2 / w, "h": bh2 / h}
-                results.append(
-                    {"text": txt.upper(), "confidence": conf, "box": box}
-                )
+                n = len(data.get("text", []))
+                for i in range(n):
+                    raw_text = data["text"][i]
+                    txt = ("" if raw_text is None else str(raw_text)).strip()
 
-        # 이미 충분히 텍스트가 나오면 더 안 키워도 됨
+                    # conf 타입 안전 처리
+                    try:
+                        conf = float(data["conf"][i]) / 100.0
+                    except Exception:
+                        conf = 0.0
+
+                    # 컷(완화): 0.45
+                    if not txt or conf < 0.45:
+                        continue
+
+                    # 박스 좌표 역스케일 + 원본 좌표계 보정
+                    try:
+                        bx = int(data["left"][i] / scale)
+                        by = int(data["top"][i] / scale)
+                        bw2 = int(data["width"][i] / scale)
+                        bh2 = int(data["height"][i] / scale)
+                    except Exception:
+                        continue
+
+                    bx += x
+                    by += y
+
+                    box = {
+                        "x": bx / w,
+                        "y": by / h,
+                        "w": bw2 / w,
+                        "h": bh2 / h,
+                    }
+                    results.append(
+                        {"text": txt.upper(), "confidence": conf, "box": box}
+                    )
+
+        # 충분히 텍스트가 모이면 조기종료
         if len(results) >= 6:
             break
 
-    # 중복 박스/텍스트 간단 정리 (같은 문자열이면 더 높은 conf만 남김)
-    dedup = {}
+    # 간단 중복 제거: (텍스트, 대략 좌표) 키로 최고 conf만 유지
+    dedup: Dict[Any, Dict[str, Any]] = {}
     for r in results:
         key = (r["text"], round(r["box"]["x"], 3), round(r["box"]["y"], 3))
         if key not in dedup or r["confidence"] > dedup[key]["confidence"]:
@@ -78,7 +135,7 @@ def run_ocr(img_bgr, roi=None) -> List[Dict[str, Any]]:
 
     texts = list(dedup.values())
 
-    # (2) 반환 직전 로그
+    # 반환 로그
     print(f"[LOG][OCR] OCR 결과: {texts}")
 
     return texts

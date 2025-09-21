@@ -61,7 +61,7 @@ async def scan(
     try:
         det = detector.detect(img, guide_box=gb)
         print(f"[LOG][DETECT] result: present={det.get('present')}, score={det.get('score'):.3f}, "
-              f"bbox={det.get('bbox')}, area_ratio={det.get('area_ratio'):.4f}, inside_ratio={det.get('inside_ratio')}")
+            f"bbox={det.get('bbox')}, area_ratio={det.get('area_ratio'):.4f}, inside_ratio={det.get('inside_ratio')}")
     except Exception as e:
         print("[LOG][DETECT][ERROR] detect exception:", e)
         traceback.print_exc()
@@ -77,7 +77,7 @@ async def scan(
 
     # ---------- ROI 산출 (탐지 성공 시: bbox 기반, 실패 시: 백업 ROI) ----------
     roi = None
-    if det["present"] and det["bbox"]["w"] > 0 and det["bbox"]["h"] > 0:
+    if det["bbox"]["w"] > 0 and det["bbox"]["h"] > 0:
         # 1) 탐지 bbox → 픽셀
         x = int(det["bbox"]["x"] * w)
         y = int(det["bbox"]["y"] * h)
@@ -128,8 +128,8 @@ async def scan(
     try:
         quality = calc_quality(img)
         print(f"[LOG][QUALITY] blur={quality.get('blur'):.2f}, "
-              f"brightness={quality.get('brightness'):.3f}, "
-              f"glare_ratio={quality.get('glare_ratio'):.3f}")
+            f"brightness={quality.get('brightness'):.3f}, "
+            f"glare_ratio={quality.get('glare_ratio'):.3f}")
     except Exception as e:
         print("[LOG][QUALITY][ERROR] calc_quality exception:", e)
         traceback.print_exc()
@@ -141,7 +141,7 @@ async def scan(
     try:
         match = get_match(texts, user_query or "")
         print(f"[LOG][MATCH] user_query={user_query} → final={match.get('final')}, "
-              f"candidates={match.get('candidates')}")
+            f"candidates={match.get('candidates')}")
     except Exception as e:
         print("[LOG][MATCH][ERROR] get_match exception:", e)
         traceback.print_exc()
@@ -163,8 +163,8 @@ async def scan(
     action = "auto_advance" if auto_ok else "stay"
 
     print(f"[LOG][ACTION] has_box={has_box}, score={det['score']:.3f} (min={min_score:.3f}), "
-          f"area={det['area_ratio']:.3f}, quality_ok={good_quality}, "
-          f"matched={match['final'] is not None} → action={action}")
+        f"area={det['area_ratio']:.3f}, quality_ok={good_quality}, "
+        f"matched={match['final'] is not None} → action={action}")
 
     # ---------- 타이밍 ----------
     total_ms = int((time.time() - t0) * 1000)
@@ -173,7 +173,7 @@ async def scan(
     match_ms = int((t_m1 - t_m0) * 1000)
     quality_ms = int((t_q1 - t_q0) * 1000)
     print(f"[LOG][TIME] total={total_ms}ms, detect={detect_ms}ms, ocr={ocr_ms}ms, "
-          f"match={match_ms}ms, quality={quality_ms}ms")
+        f"match={match_ms}ms, quality={quality_ms}ms")
 
     # ---------- 응답 ----------
     resp = {
