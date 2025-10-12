@@ -1,8 +1,11 @@
 from sqlalchemy import Integer, String
-from sqlalchemy.orm import Mapped, mapped_column
-from app.models.base import Base
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from .base import Base, TimeStampMixin
 
-class Brand(Base):
+class Brand(Base, TimeStampMixin):
     __tablename__ = "brand"
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False, index=True)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+
+    perfumes = relationship("Perfume", back_populates="brand")
