@@ -1,16 +1,57 @@
-from sqlalchemy import Integer, String, Float, ForeignKey
-from sqlalchemy.orm import Mapped, mapped_column, relationship
-from .base import Base, TimeStampMixin
+from sqlalchemy import Column, Integer, String, ForeignKey, DECIMAL, JSON, TIMESTAMP, func
+from sqlalchemy.dialects.mysql import BINARY
+from sqlalchemy.orm import relationship
+from app.models.base import Base
+import uuid
 
-class Perfume(Base, TimeStampMixin):
+class Perfume(Base):
     __tablename__ = "perfume"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    brand_id: Mapped[int] = mapped_column(ForeignKey("brand.id"), nullable=False)
-    name: Mapped[str] = mapped_column(String(150), nullable=False)
-    image_url: Mapped[str | None] = mapped_column(String(255))
-    price: Mapped[float | None] = mapped_column(Float)
-    longevity: Mapped[int | None] = mapped_column(Integer)
-    sillage: Mapped[int | None] = mapped_column(Integer)
+    # --- 기본 키 및 외래 키 ---
+    # BINARY(16) 타입 처리
+    id = Column(BINARY(16), primary_key=True, default=lambda: uuid.uuid4().bytes, index=True)
+    brand_id = Column(BINARY(16), ForeignKey("brand.id"), index=True) # MUL
+    
+    # --- 텍스트 및 속성 ---
+    name = Column(String(255), nullable=False)
+    brand_name = Column(String(100), nullable=True) 
+    currency = Column(String(3), default="KRW", nullable=True)
+    image_url = Column(String(255), nullable=True) 
+    image_fallbacks = Column(JSON, nullable=True)
+    gender = Column(String(20), nullable=True) # MUL
+    fragella_id = Column(String(100), unique=True, nullable=True) # UNI
+    purchase_url = Column(String(255), nullable=True)
 
+    # --- 숫자 타입 ---
+    # DECIMAL(10, 2) 및 DECIMAL(5, 2) 타입 처리
+    price = Column(DECIMAL(10, 2), nullable=True)
+    longevity = Column(DECIMAL(5, 2), nullable=True)
+    sillage = Column(DECIMAL(5, 2), nullable=True)
+
+    # --- JSON 타입 (노트 및 랭킹 데이터) ---
+    main_accords = Column(JSON, nullable=True)
+    main_accords_percentage = Column(JSON, nullable=True)
+    top_notes = Column(JSON, nullable=True)
+    middle_notes = Column(JSON, nullable=True)
+    base_notes = Column(JSON, nullable=True)
+    general_notes = Column(JSON, nullable=True)
+    season_ranking = Column(JSON, nullable=True)
+    occasion_ranking = Column(JSON, nullable=True)
+
+    # --- 카운터 필드 ---
+    view_count = Column(Integer, default=0, nullable=True)
+    wish_count = Column(Integer, default=0, nullable=True)
+    purchase_count = Column(Integer, default=0, nullable=True)
+
+    # --- 타임스탬프 필드 ---
+    created_at = Column(TIMESTAMP, default=func.now())
+    updated_at = Column(TIMESTAMP, default=func.now(), onupdate=func.now()) # on update CURRENT_TIMESTAMP
+    last_synced_at = Column(TIMESTAMP, nullable=True)
+    
+    # --- 관계 설정 (InvalidRequestError 해결) ---
+    # Brand 모델과의 관계
     brand = relationship("Brand", back_populates="perfumes")
+
+    # PerfumeNote 모델과의 관계 (이전에 누락되어 500 에러를 유발했습니다)
+    # PerfumeNote 모델의 back_populates가 'perfume'이라고 가정합니다.
+    notes = relationship("PerfumeNote", back_populates="perfume")

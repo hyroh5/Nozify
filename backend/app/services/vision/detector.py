@@ -190,9 +190,21 @@ class BottleDetector:
         }
 
 
-# 싱글톤
-detector = BottleDetector(
-    VisionConfig.MODEL_PATH,
-    VisionConfig.DEVICE,
-    VisionConfig.THRESH_BOTTLE_SCORE,
-)
+# 싱글톤 지연 로딩 (파일 하단 몇 줄만 교체)
+from functools import lru_cache
+from pathlib import Path
+
+def _resolve(p: str | None) -> str:
+    if not p:
+        return ""
+    path = Path(p)
+    return str(path if path.is_absolute() else (Path(__file__).resolve().parents[3] / p).resolve())
+
+@lru_cache(maxsize=1)
+def get_detector() -> BottleDetector:
+    return BottleDetector(
+        model_path=_resolve(getattr(VisionConfig, "MODEL_PATH", "")),
+        device=getattr(VisionConfig, "DEVICE", "cpu"),
+        score_th=getattr(VisionConfig, "THRESH_BOTTLE_SCORE", 0.5),
+    )
+

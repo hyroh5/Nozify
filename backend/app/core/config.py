@@ -17,6 +17,7 @@ def _abs(path: str | None) -> str:
     # 이미 절대경로면 그대로, 아니면 backend 기준 상대경로 → 절대경로
     return path if os.path.isabs(path) else os.path.join(ROOT_DIR, path)
 
+
 class Settings(BaseSettings):
     APP_ENV: str = "dev"
     APP_NAME: str = "nozify-api"
@@ -28,13 +29,12 @@ class Settings(BaseSettings):
     DB_PASSWORD: str = "nozify_pw"
     DB_NAME: str = "nozify_db"
 
-    # ✅ .env에 있는 이 키를 모델에 정의해야 함
     DATABASE_URL: Optional[str] = None
-
-    # (선택) 드라이버 필드도 있으면 조립 시 편함
     DB_DRIVER: str = "pymysql"
 
-    # ✅ pydantic v2 설정: .env 경로 + extra 무시
+    # Fragella API 연동용 키
+    FRAGELLA_API_KEY: Optional[str] = None
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
@@ -44,7 +44,7 @@ class Settings(BaseSettings):
 
 class VisionConfig:
     DEVICE = os.getenv("VISION_DEVICE", "cpu")
-    MODEL_PATH = os.getenv("BOTTLE_MODEL_PATH", "backend/app/assets/models/perfume_seg.onnx")
+    MODEL_PATH = _abs(os.getenv("BOTTLE_MODEL_PATH", "backend/app/assets/models/perfume_seg.onnx"))
 
     OCR_LANGS = os.getenv("OCR_LANGS", "eng,kor")
 

@@ -8,12 +8,12 @@ import cv2
 
 from app.core.config import VisionConfig
 from app.services.vision.utils import decode_image, clamp01  # 좌표 보정용
-from app.services.vision.detector import detector
+from app.services.vision.detector import get_detector
 from app.services.vision.ocr import run_ocr, run_ocr_rotated
 from app.services.vision.quality import calc_quality
 from app.services.vision.matcher import get_match
 
-router = APIRouter()
+router = APIRouter(tags=["vision"])
 
 
 def _roi_from_bbox(bbox, w, h):
@@ -95,7 +95,7 @@ def dedup_merge(list1, list2):
     return list(out.values())
 
 
-@router.post("/api/v1/vision/scan")
+@router.post("/scan")
 async def scan(
     image: UploadFile = File(...),
     guide_box: Optional[str] = Form(None),  # JSON 문자열 {"x":..,"y":..,"w":..,"h":..}
@@ -144,12 +144,18 @@ async def scan(
     # ---------- 병 탐지 ----------
     t_det0 = time.time()
     try:
+        detector = get_detector()
+        if not detector.ready():
+            raise HTTPException(status_code=503, detail="Vision model not ready")
+
         det = detector.detect(img, guide_box=gb)
         print(
             f"[LOG][DETECT] result: present={det.get('present')}, "
             f"score={det.get('score'):.3f}, bbox={det.get('bbox')}, "
             f"area_ratio={det.get('area_ratio'):.4f}"
         )
+    except HTTPException:
+        raise
     except Exception as e:
         print("[LOG][DETECT][ERROR] detect exception:", e)
         traceback.print_exc()

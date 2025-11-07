@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.services.vision.detector import detector
+from app.services.vision.detector import get_detector
 from app.core.config import VisionConfig
 
 router = APIRouter()

@@ -1,8 +1,8 @@
 from sqlalchemy import Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
-from .base import Base, TimeStampMixin
+from .base import Base, TimestampMixin
 
-class User(Base, TimeStampMixin):
+class User(Base, TimestampMixin):
     __tablename__ = "user"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

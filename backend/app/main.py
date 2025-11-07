@@ -1,7 +1,24 @@
+# backend/app/main.py
 from fastapi import FastAPI
-from app.api.routes.vision.health import router as health_router
-from app.api.routes.vision.scan import router as scan_router
+from app.core.config import settings
+from app.core.db import ping as db_ping
+from app.api.v1.router import api_v1
+from app.api.routes.health import router as health_router
+from fastapi.middleware.cors import CORSMiddleware
 
-app = FastAPI()
-app.include_router(health_router)
-app.include_router(scan_router)
+app = FastAPI(title="Nozify API", version="1.0.0")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],   # 배포 시 도메인으로 좁히기
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# 헬스체크
+@app.get("/health")
+def health():
+    return {"status": "ok", "db": db_ping()}
+
+# v1 전체 라우터(prefix 적용)
+app.include_router(api_v1, prefix=settings.API_PREFIX)
