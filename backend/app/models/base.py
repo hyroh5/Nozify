@@ -18,5 +18,16 @@ class TimestampMixin:
         nullable=False,
     )
 
-# 과거 오타 호환용. 나중에 지워도 됨.
-TimeStampMixin = TimestampMixin
+
+# UUID BINARY(16) <-> hex string
+def uuid_bytes_to_hex(b: bytes | None) -> str | None:
+    if not b:
+        return None
+    import uuid
+    return uuid.UUID(bytes=b).hex
+
+def uuid_hex_to_bytes(h: str | None) -> bytes | None:
+    if not h:
+        return None
+    import uuid
+    return uuid.UUID(hex=h).bytes

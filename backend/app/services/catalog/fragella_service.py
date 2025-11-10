@@ -10,8 +10,7 @@ from dotenv import load_dotenv, find_dotenv
 # .env 로드
 load_dotenv(find_dotenv(), override=False)
 
-__all__ = ["FragellaClient", "FragellaError", "TOP_BRANDS"]
-
+__all__ = ["FragellaClient", "FragellaError"]
 
 class FragellaError(Exception):
     """Fragella API 호출 중 발생한 HTTP/네트워크 에러 래퍼"""
@@ -19,14 +18,6 @@ class FragellaError(Exception):
         super().__init__(message)
         self.status = status
         self.url = url
-
-
-TOP_BRANDS: List[str] = [
-    "Chanel", "Dior", "Jo Malone London", "Diptyque", "Byredo",
-    "Tom Ford", "Yves Saint Laurent", "Gucci", "Hermes", "Creed",
-    "Maison Francis Kurkdjian", "Montblanc", "Versace", "Giorgio Armani",
-    "Lancome", "Mugler", "Calvin Klein", "Burberry", "Givenchy", "Guerlain",
-]
 
 
 class FragellaClient:
@@ -52,9 +43,6 @@ class FragellaClient:
         self.session = requests.Session()
         self.session.headers.update({self.auth_header: self.api_key})
 
-    # ─────────────────────────────
-    # 내부 GET 헬퍼
-    # ─────────────────────────────
     def _get(self, path: str, params: Optional[Dict[str, Any]] = None) -> Any:
         url = f"{self.base_url}{path}"
         try:
@@ -63,7 +51,6 @@ class FragellaClient:
             raise FragellaError(f"네트워크 오류: {e}", url=url) from e
 
         if not resp.ok:
-            # 디버그에 도움 되도록 최소한의 본문 포함
             snippet = ""
             try:
                 snippet = resp.text[:200]
@@ -80,25 +67,25 @@ class FragellaClient:
             raise FragellaError("JSON 파싱 실패", status=resp.status_code, url=str(resp.url)) from e
 
     # ─────────────────────────────
-    # 공개 메서드 (문서에 맞춰 구성)
+    # 공개 메서드 (문서 기반, 결과는 모두 '배열')
     # ─────────────────────────────
-    def list_brands(self, page: int = 1, size: int = 100) -> Any:
-        # 필요 시 페이징 지원되는 엔드포인트로 교체
-        return self._get("/brands", {"page": page, "size": size})
-
-    def list_perfumes(self, page: int = 1, size: int = 100) -> Any:
-        # 전체 향수 목록 엔드포인트가 있는 경우 사용
-        return self._get("/perfumes", {"page": page, "size": size})
-
-    def list_fragrances_by_brand(self, brand_name: str, limit: int = 50) -> Any:
-        # 문서 기준: GET /brands/{brand}?limit=N  (brand는 URL path segment)
-        # 브랜드명에 공백이 있을 수 있으므로 requests가 알아서 인코딩
-        return self._get(f"/brands/{brand_name}", {"limit": limit})
-
-    def get_perfume_detail(self, perfume_id: int | str) -> Any:
-        return self._get(f"/perfumes/{perfume_id}")
-
     def get_usage(self) -> Any:
-        # 문서 기준 사용량 엔드포인트. 프로젝트에 맞게 조정 가능.
         return self._get("/usage")
-      
+
+    def search_fragrances(self, term: str, limit: int = 10) -> List[Dict[str, Any]]:
+        # GET /fragrances?search=term&limit=10
+        out = self._get("/fragrances", {"search": term, "limit": limit})
+        return out if isinstance(out, list) else []
+
+    def list_fragrances_by_brand(self, brand_name: str, limit: int = 10) -> List[Dict[str, Any]]:
+        # GET /brands/:brandName?limit=N  → 배열 반환
+        out = self._get(f"/brands/{brand_name}", {"limit": limit})
+        return out if isinstance(out, list) else []
+
+    def search_notes(self, term: str, limit: int = 10) -> List[Dict[str, Any]]:
+        out = self._get("/notes", {"search": term, "limit": limit})
+        return out if isinstance(out, list) else []
+
+    def search_accords(self, term: str, limit: int = 10) -> List[Dict[str, Any]]:
+        out = self._get("/accords", {"search": term, "limit": limit})
+        return out if isinstance(out, list) else []

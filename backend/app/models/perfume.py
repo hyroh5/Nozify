@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, DECIMAL, JSON, TIMESTAMP, func
+from sqlalchemy import Column, Integer, String, ForeignKey, DECIMAL, JSON, TIMESTAMP, func, UniqueConstraint, Index
 from sqlalchemy.dialects.mysql import BINARY
 from sqlalchemy.orm import relationship
 from app.models.base import Base
@@ -6,6 +6,10 @@ import uuid
 
 class Perfume(Base):
     __tablename__ = "perfume"
+    __table_args__ = (
+        UniqueConstraint("external_source", "external_id", name="uq_perfume_external"),
+        Index("ix_perfume_brand_id", "brand_id"),
+    )
 
     # --- 기본 키 및 외래 키 ---
     # BINARY(16) 타입 처리
@@ -20,7 +24,11 @@ class Perfume(Base):
     image_fallbacks = Column(JSON, nullable=True)
     gender = Column(String(20), nullable=True) # MUL
     fragella_id = Column(String(100), unique=True, nullable=True) # UNI
-    purchase_url = Column(String(255), nullable=True)
+    purchase_url = Column(String(1024), nullable=True)
+    source_url = Column(String(255), nullable=True)
+    concentration = Column(String(50), nullable=True)
+    external_source = Column(String(50), nullable=False, default="fragella")
+    external_id = Column(String(100), nullable=False)
 
     # --- 숫자 타입 ---
     # DECIMAL(10, 2) 및 DECIMAL(5, 2) 타입 처리

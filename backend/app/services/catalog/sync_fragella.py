@@ -1,20 +1,23 @@
+# backend/app/services/catalog/sync_fragella.py
 from __future__ import annotations
 
 import os
 import sys
 import time
-from typing import Any, Dict, List, Optional
-from datetime import datetime
-import uuid
+from decimal import Decimal, InvalidOperation
+from typing import Any, Dict, List, Tuple
 
 # ────────────────────────────────────────────────────────────
-# 실행 옵션 (3회 테스트 유지)
+# 실행 옵션
 # ────────────────────────────────────────────────────────────
-DRY_RUN: bool = False           # 👈 DB에 실제 쓰기 (False)
-LIMIT_PER_BRAND: int = 2        # 👈 브랜드당 2개만 가져옴 (테스트용)
-SLEEP_SEC: float = 1.3
+DRY_RUN: bool = False          # 실제 DB write 여부
+LIMIT_PER_BRAND: int = 30       # 브랜드당 최대 가져올 개수
+SLEEP_SEC: float = 0.6         # 호출 사이 딜레이(429 완화)
 TEST_BRANDS: List[str] | None = [
-    "Chanel"]
+ "Chanel","Dior","Yves Saint Laurent","Gucci","Versace","Giorgio Armani",
+ "Tom Ford","Hermes","Maison Francis Kurkdjian","Jo Malone London","Byredo",
+ "Diptyque","Montblanc","Mugler","Calvin Klein","Burberry","Givenchy","Guerlain",
+]  # 테스트 시 소량만
 
 # ────────────────────────────────────────────────────────────
 # sys.path / .env 로드
@@ -32,192 +35,221 @@ load_dotenv(find_dotenv(), override=False)
 # ────────────────────────────────────────────────────────────
 from app.core.db import SessionLocal
 from app.models import Brand, Perfume
-from app.services.catalog.fragella_service import (
-    FragellaClient,
-    TOP_BRANDS as _TOP_BRANDS,
-    FragellaError,
-)
+from app.services.catalog.fragella_service import FragellaClient, FragellaError
+
 
 def log(*args):
     print(*args, flush=True)
 
-# ────────────────────────────────────────────────────────────
-# 헬퍼 함수
-# ────────────────────────────────────────────────────────────
 
-def extract_and_clean(data: Dict[str, Any], keys: List[str]) -> Dict[str, Any]:
-    """Fragella 응답에서 필요한 필드를 추출하고 None이면 빈 값으로 클린업합니다."""
-    result = {}
-    for key in keys:
-        value = data.get(key)
-        # JSON/List 타입 필드가 None이면 빈 리스트/딕셔너리로 변환하여 DB 저장 오류 방지
-        if key in ["General Notes", "Top Notes", "Middle Notes", "Base Notes", "Main Accords"]:
-            result[key] = value or []
-        elif key in ["Main Accords Percentage", "Season Ranking", "Occasion Ranking"]:
-            result[key] = value or {}
-        else:
-            result[key] = value
-    return result
+# ────────────────────────────────────────────────────────────
+# 매핑 헬퍼
+# ────────────────────────────────────────────────────────────
+def _to_decimal_or_none(v: Any) -> Decimal | None:
+    if v is None or v == "":
+        return None
+    try:
+        return Decimal(str(v))
+    except InvalidOperation:
+        return None
 
-def update_perfume_detail(db, perfume: Perfume, detail_data: Dict[str, Any]):
+def _ensure_list(v: Any) -> list:
+    return v if isinstance(v, list) else []
+
+def _ensure_dict(v: Any) -> dict:
+    return v if isinstance(v, dict) else {}
+
+def map_fragella_item(it: Dict[str, Any]) -> Dict[str, Any]:
     """
-    DB에 존재하는 Perfume 객체를 상세 API 응답 데이터로 업데이트합니다.
-    (이 함수가 핵심적으로 상세 정보를 DB에 반영합니다.)
+    Fragella 문서 기준 필드 매핑:
+    - 키는 대소문자/공백 포함. 정확히 그대로 접근
+    - Longevity / Sillage 는 설명어(Moderate 등) → 우리 스키마가 DECIMAL이면 None 저장
+    - Notes 객체는 Top/Middle/Base 로 분해
     """
-    
-    # 🚨 상세 정보 필드들을 매핑하여 업데이트
-    update_data = extract_and_clean(detail_data, [
-        "Price", "Longevity", "Sillage",
-        "Gender", "Purchase URL", 
-        "General Notes", "Top Notes", "Middle Notes", "Base Notes", 
-        "Main Accords", "Main Accords Percentage", 
-        "Season Ranking", "Occasion Ranking",
-        "Currency", "Image Fallbacks"
-    ])
-    
-    # Perfume 모델 필드 이름에 맞게 변환
-    mapping = {
-        "Price": "price", "Longevity": "longevity", "Sillage": "sillage",
-        "Gender": "gender", "Purchase URL": "purchase_url",
-        "General Notes": "general_notes", "Top Notes": "top_notes", 
-        "Middle Notes": "middle_notes", "Base Notes": "base_notes", 
-        "Main Accords": "main_accords", "Main Accords Percentage": "main_accords_percentage",
-        "Season Ranking": "season_ranking", "Occasion Ranking": "occasion_ranking",
-        "Currency": "currency", "Image Fallbacks": "image_fallbacks"
+    name        = it.get("Name") or ""
+    brand_name  = it.get("Brand") or ""
+    image_url   = it.get("Image URL") or ""
+    gender      = it.get("Gender") or ""  # women / men / unisex 등
+    price_dec   = _to_decimal_or_none(it.get("Price"))  # 문자열 가격을 Decimal 로 변환 시도
+    currency    = it.get("Currency") or None
+
+    # 설명어라 수치 저장 곤란 → DECIMAL 컬럼이면 None 유지, 문자열 컬럼이면 그대로 사용
+    longevity   = it.get("Longevity") or None
+    sillage     = it.get("Sillage") or None
+
+    main_acc    = _ensure_list(it.get("Main Accords"))
+    main_acc_pct= _ensure_dict(it.get("Main Accords Percentage"))
+    season_rank = _ensure_list(it.get("Season Ranking"))
+    occasion_rk = _ensure_list(it.get("Occasion Ranking"))
+    image_falls = _ensure_list(it.get("Image Fallbacks"))
+    purchase_url= it.get("Purchase URL") or None
+
+    # Notes → Top/Middle/Base 분리
+    notes_obj   = _ensure_dict(it.get("Notes"))
+    top_notes   = _ensure_list(notes_obj.get("Top"))
+    middle_notes= _ensure_list(notes_obj.get("Middle"))
+    base_notes  = _ensure_list(notes_obj.get("Base"))
+
+    # Fragella 문서는 별도의 ID 를 제공하지 않음 → 외부 식별자는 Name+Brand 조합으로 고정
+    external_source = "fragella"
+    external_id = f"{brand_name}||{name}".strip()
+
+    return {
+        "name": name,
+        "brand_name": brand_name,
+        "image_url": image_url,
+        "gender": gender,
+        "price": price_dec,
+        "currency": currency,
+        "longevity": longevity,     # 우리 스키마가 DECIMAL 이면 None 로 남음
+        "sillage": sillage,         # 우리 스키마가 DECIMAL 이면 None 로 남음
+        "main_accords": main_acc,
+        "main_accords_percentage": main_acc_pct,
+        "season_ranking": season_rank,
+        "occasion_ranking": occasion_rk,
+        "image_fallbacks": image_falls,
+        "purchase_url": purchase_url,
+        "top_notes": top_notes,
+        "middle_notes": middle_notes,
+        "base_notes": base_notes,
+        "external_source": external_source,
+        "external_id": external_id,
     }
-    
-    for fragella_key, model_key in mapping.items():
-        if fragella_key in update_data:
-            setattr(perfume, model_key, update_data[fragella_key])
-
-    # 🚨 last_synced_at 업데이트 (시간 문제 해결)
-    perfume.last_synced_at = datetime.now()
 
 
-def upsert_brand_and_perfumes_summary(db, brand_name: str, summary_items: List[Dict[str, Any]]) -> tuple[Brand, list[Perfume]]:
+def upsert_one(db, brand: Brand, mapped: Dict[str, Any]) -> Tuple[bool, bool]:
     """
-    브랜드와 향수 요약 정보(ID, Name)를 DB에 저장/업데이트합니다.
-    Perfume 객체를 리스트로 반환하여 다음 단계(상세 조회)에 사용합니다.
+    반환: (created, updated)
+    - 외부 키는 (external_source, external_id) 로 고정
     """
-    perfume_objects = []
-    
-    # 1) 브랜드 upsert
-    brand = db.query(Brand).filter(Brand.name == brand_name).first()
-    if not brand:
-        brand = Brand(name=brand_name)
+    from sqlalchemy import and_
+    created = updated = False
+
+    # 먼저 기존 존재 확인
+    p = (
+        db.query(Perfume)
+          .filter(
+              Perfume.external_source == mapped["external_source"],
+              Perfume.external_id == mapped["external_id"],
+          )
+          .first()
+    )
+
+    if p is None:
+        # 신규 Insert
+        p = Perfume(
+            name=mapped["name"],
+            brand_id=brand.id,
+            brand_name=brand.name,
+            image_url=mapped["image_url"],
+            gender=mapped["gender"],
+            price=mapped["price"],
+            currency=mapped["currency"],
+            longevity=None,  # 설명어 → 스키마가 DECIMAL 이므로 None
+            sillage=None,    # 설명어 → 스키마가 DECIMAL 이므로 None
+            main_accords=mapped["main_accords"],
+            main_accords_percentage=mapped["main_accords_percentage"],
+            top_notes=mapped["top_notes"],
+            middle_notes=mapped["middle_notes"],
+            base_notes=mapped["base_notes"],
+            general_notes=None,  # 문서에 General Notes 배열도 있으나 Notes 와 중복 우려 → 필요 시 추가
+            season_ranking=mapped["season_ranking"],
+            occasion_ranking=mapped["occasion_ranking"],
+            image_fallbacks=mapped["image_fallbacks"],
+            purchase_url=mapped["purchase_url"],
+            external_source=mapped["external_source"],
+            external_id=mapped["external_id"],
+        )
         if not DRY_RUN:
-            db.add(brand)
-            db.flush() # id 확보
+            db.add(p)
+        created = True
+    else:
+        # 업데이트(핵심 필드만 덮어쓰기)
+        if not DRY_RUN:
+            p.name = mapped["name"] or p.name
+            p.brand_id = brand.id
+            p.brand_name = brand.name
+            p.image_url = mapped["image_url"] or p.image_url
+            p.gender = mapped["gender"] or p.gender
+            p.price = mapped["price"] if mapped["price"] is not None else p.price
+            p.currency = mapped["currency"] or p.currency
 
-    # 2) 향수 요약 정보 upsert
-    for it in summary_items:
-        fragella_id = str(it.get("Fragella_ID") or it.get("ID"))
-        name = it.get("Name")
-        image_url = it.get("Image URL")
-        gender = it.get("Gender")
-        
-        if not fragella_id or not name:
-            continue
+            # longevity/sillage(설명어)는 현 스키마 상 DECIMAL 이므로 저장 생략
+            p.main_accords = mapped["main_accords"] or p.main_accords
+            p.main_accords_percentage = mapped["main_accords_percentage"] or p.main_accords_percentage
+            p.top_notes = mapped["top_notes"] or p.top_notes
+            p.middle_notes = mapped["middle_notes"] or p.middle_notes
+            p.base_notes = mapped["base_notes"] or p.base_notes
+            p.season_ranking = mapped["season_ranking"] or p.season_ranking
+            p.occasion_ranking = mapped["occasion_ranking"] or p.occasion_ranking
+            p.image_fallbacks = mapped["image_fallbacks"] or p.image_fallbacks
+            p.purchase_url = mapped["purchase_url"] or p.purchase_url
+        updated = True
 
-        perfume = db.query(Perfume).filter(Perfume.fragella_id == fragella_id).first()
-        
-        if not perfume:
-            # 신규 insert
-            perfume = Perfume(
-                name=name,
-                brand_id=brand.id,
-                brand_name=brand_name,
-                fragella_id=fragella_id,
-                image_url=image_url,
-                gender=gender,
-            )
-            if not DRY_RUN:
-                db.add(perfume)
-                db.flush() # id 확보
-        else:
-            # 기존 업데이트 (요약 정보만)
-            if not DRY_RUN:
-                perfume.name = name
-                perfume.image_url = image_url
-                perfume.gender = gender
+    return created, updated
 
-        perfume_objects.append(perfume)
-        
-    if not DRY_RUN:
-        db.commit() # 요약 정보 저장/업데이트 커밋
-        
-    return brand, perfume_objects
-
-
-# ────────────────────────────────────────────────────────────
-# 메인 동기화 함수 (수정)
-# ────────────────────────────────────────────────────────────
 
 def sync_top_brands():
     client = FragellaClient()
-    
-    brands_to_sync = TEST_BRANDS if TEST_BRANDS and TEST_BRANDS != [] else _TOP_BRANDS
-    
+
+    # 사용량 조회(가능하면)
     try:
         usage = client.get_usage()
         log("[Fragella usage BEFORE]", usage)
     except Exception:
         log("[Fragella] usage 조회 실패(무시)")
 
+    brands_to_sync = TEST_BRANDS or ["Dior", "Chanel"]
+
     log(f"[Sync] target brands = {len(brands_to_sync)}, limit_per_brand={LIMIT_PER_BRAND}")
 
-    total_upserted_perfumes = 0
-    total_synced_details = 0 # 상세 정보 업데이트 카운터 추가
+    total_created = 0
+    total_updated = 0
 
     with SessionLocal() as db:
-        for brand in brands_to_sync:
+        for brand_name in brands_to_sync:
             try:
-                log(f"  - syncing brand: {brand} (Phase 1: Summary List)...")
-                
-                # 1. 목록 API 호출 (1회 소모)
-                summary_items = client.list_fragrances_by_brand(brand, limit=LIMIT_PER_BRAND)
-                
-                # 2. 요약 정보 DB에 저장/업데이트
-                _, perfume_objects = upsert_brand_and_perfumes_summary(db, brand, summary_items)
-                
-                log(f"    -> Found {len(perfume_objects)} perfumes. (Phase 2: Detail Sync)")
-                
-                # 3. 개별 향수 상세 조회 및 업데이트 (N회 소모)
-                for p_obj in perfume_objects:
-                    fragella_id = p_obj.fragella_id
-                    if not fragella_id:
-                        log(f"    !! 경고: Perfume ID {p_obj.id.hex()[:8]}...에 Fragella ID 없음. 스킵.")
+                log(f"  - syncing brand: {brand_name} ...")
+                arr = client.list_fragrances_by_brand(brand_name, limit=LIMIT_PER_BRAND)
+                log(f"    -> fetched {len(arr)} items")
+
+                # 1) 브랜드 upsert
+                brand = db.query(Brand).filter(Brand.name == brand_name).first()
+                if not brand:
+                    brand = Brand(name=brand_name)
+                    if not DRY_RUN:
+                        db.add(brand)
+                        db.flush()
+
+                # 2) 향수 upsert
+                created_cnt = 0
+                updated_cnt = 0
+                for it in arr:
+                    mapped = map_fragella_item(it)
+                    if not mapped["name"] or not mapped["brand_name"]:
                         continue
-                    
-                    # 🚨 상세 API 호출 (1회 소모)
-                    detail_data = client.get_fragrance_detail(fragella_id)
-                    
-                    # 🚨 상세 정보로 DB 업데이트 (핵심 로직)
-                    update_perfume_detail(db, p_obj, detail_data)
-                    
-                    # 🚨 1.3초 슬립 (API 호출 간격 준수)
-                    time.sleep(SLEEP_SEC) 
-                    
-                    total_synced_details += 1
+
+                    c, u = upsert_one(db, brand, mapped)
+                    created_cnt += 1 if c else 0
+                    updated_cnt += 1 if (u and not c) else 0
+
+                    time.sleep(SLEEP_SEC)
 
                 if not DRY_RUN:
-                    db.commit() # 상세 정보 업데이트 커밋
-                
-                total_upserted_perfumes += len(perfume_objects)
-                log(f"    -> DONE. Total {len(perfume_objects)} perfumes fully synced.")
-                
+                    db.commit()
+
+                total_created += created_cnt
+                total_updated += updated_cnt
+                log(f"    -> upserted: created={created_cnt}, updated={updated_cnt}")
+
             except FragellaError as e:
-                log(f"    !! 실패 (Fragella): {e}")
+                log(f"    !! 실패 (Fragella): {e}")
             except Exception as e:
-                log(f"    !! 예외: {type(e).__name__}: {e}")
-            
-            # 브랜드별 동기화 후 커밋 보장
-            if not DRY_RUN:
-                db.commit()
+                log(f"    !! 예외: {type(e).__name__}: {e}")
 
+    log(f"[Sync DONE] created={total_created}, updated={total_updated}")
 
-    log(f"[Sync DONE] Total Perfumes Upserted={total_upserted_perfumes}, Total Details Synced={total_synced_details}")
-
+    # 사용량 재확인(가능하면)
     try:
         usage = client.get_usage()
         log("[Fragella usage AFTER]", usage)
