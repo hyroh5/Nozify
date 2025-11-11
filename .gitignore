@@ -28,3 +28,6 @@ dist/
 build/
 .coverage
 htmlcov/
+
+.venv/
+venv/
