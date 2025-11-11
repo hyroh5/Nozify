@@ -1,0 +1,5 @@
+# Flutter Android build settings
+org.gradle.daemon=false
+org.gradle.parallel=false
+org.gradle.caching=false
+kotlin.incremental=false

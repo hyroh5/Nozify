@@ -1,37 +1,65 @@
-# venv
+# 🚀 Virtual Environment
 .venv/
 venv/
 
-# python 캐시
+# 🐍 Python Caches & Artifacts
 __pycache__/
 *.py[cod]
 *.pyo
 *.pyd
-*.pyc
 *.egg-info/
 .pytest_cache/
 .mypy_cache/
 .cache/
+*.log
+*.pyc
 
-# 에디터/OS 잡파일
-.vscode/
-.idea/
-.DS_Store
-Thumbs.db
-
-# 환경변수/비밀
+# 🔑 Environment Variables & Secrets
 .env
 .env.*
 !.env.example
 
-# 빌드/커버리지
+# 🛠️ Build & Coverage Artifacts
 dist/
 build/
 .coverage
 htmlcov/
+*.class
+.build/
+.buildlog/
 
-backend/app/assets/models/
-backend/app/assets/debug/
-backend/app/assets/**/*.tmp
-*.onnx
-*.pt
+# 🍎 Windows & macOS System Files
+.DS_Store
+Thumbs.db
+
+# 💻 Editor & IDE Files
+.vscode/
+.idea/
+*.iml
+*.ipr
+*.iws
+.atom/
+*.swp
+.history
+
+# ⚙️ Version Control System Files (e.g., Subversion)
+.svn/
+
+# 🍏 Swift & Flutter/Dart
+.swiftpm/
+migrate_working_dir/
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+/coverage/
+
+# 🤖 Android Studio & Obfuscation
+/android/app/debug
+/android/app/profile
+/android/app/release
+app.*.symbols
+app.*.map.json
