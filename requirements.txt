@@ -32,3 +32,12 @@ typing_extensions==4.15.0
 uvicorn==0.35.0
 watchfiles==1.1.0
 websockets==15.0.1
+
+onnxruntime
+opencv-python-headless
+numpy
+pillow
+shapely
+rapidfuzz
+pytesseract
+python-multipart
