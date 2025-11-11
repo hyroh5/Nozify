@@ -10,6 +10,7 @@ from app.api.routes.me.recent_views import router as me_recent_router
 from app.api.routes.user.wishlist import router as wishlist_router
 from app.api.routes.catalog.search import router as search_router
 from app.api.routes.catalog.filters import router as filters_router
+from app.api.routes import auth as auth_router
 
 api_v1 = APIRouter()
 api_v1.include_router(health_router)
@@ -25,3 +26,6 @@ api_v1.include_router(wishlist_router, prefix="/user", tags=["User"])
 api_v1.include_router(search_router, tags=["Catalog"])
 
 api_v1.include_router(filters_router, tags=["Catalog"])
+
+
+api_v1.include_router(auth_router.router) 
