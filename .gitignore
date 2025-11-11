@@ -1,29 +1,53 @@
-# Miscellaneous
-*.class
+# 🚀 Virtual Environment
+.venv/
+venv/
+
+# 🐍 Python Caches & Artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.cache/
 *.log
 *.pyc
-*.swp
-.DS_Store
-.atom/
+
+# 🔑 Environment Variables & Secrets
+.env
+.env.*
+!.env.example
+
+# 🛠️ Build & Coverage Artifacts
+dist/
+build/
+.coverage
+htmlcov/
+*.class
 .build/
 .buildlog/
-.history
-.svn/
-.swiftpm/
-migrate_working_dir/
 
-# IntelliJ related
+# 🍎 Windows & macOS System Files
+.DS_Store
+Thumbs.db
+
+# 💻 Editor & IDE Files
+.vscode/
+.idea/
 *.iml
 *.ipr
 *.iws
-.idea/
+.atom/
+*.swp
+.history
 
-# The .vscode folder contains launch configuration and tasks you configure in
-# VS Code which you may wish to be included in version control, so this line
-# is commented out by default.
-#.vscode/
+# ⚙️ Version Control System Files (e.g., Subversion)
+.svn/
 
-# Flutter/Dart/Pub related
+# 🍏 Swift & Flutter/Dart
+.swiftpm/
+migrate_working_dir/
 **/doc/api/
 **/ios/Flutter/.last_build_id
 .dart_tool/
@@ -33,13 +57,9 @@ migrate_working_dir/
 /build/
 /coverage/
 
-# Symbolication related
-app.*.symbols
-
-# Obfuscation related
-app.*.map.json
-
-# Android Studio will place build artifacts here
+# 🤖 Android Studio & Obfuscation
 /android/app/debug
 /android/app/profile
 /android/app/release
+app.*.symbols
+app.*.map.json
