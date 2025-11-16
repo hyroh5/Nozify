@@ -1,5 +1,6 @@
 # backend/app/schemas/user.py
-from pydantic import BaseModel, EmailStr, ConfigDict
+from pydantic import BaseModel, EmailStr, ConfigDict, Field
+from typing import Optional
 
 # 요청 스키마
 class UserCreate(BaseModel):
@@ -28,3 +29,18 @@ class TokenPair(BaseModel):
 # 로그인/회원가입 응답 통합
 class UserResponse(TokenPair):
     user: UserBase
+
+class RefreshRequest(BaseModel):
+    refresh_token: str = Field(min_length=10)
+
+class TokenResponse(BaseModel):
+    access_token: str
+    refresh_token: Optional[str] = None  # refresh는 /login, /signup 때만 함께 내려감
+
+class ChangePasswordRequest(BaseModel):
+    old_password: str = Field(min_length=4)
+    new_password: str = Field(min_length=8)
+
+class UpdateProfileRequest(BaseModel):
+    name: Optional[str] = None
+    email: Optional[EmailStr] = None
