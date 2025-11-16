@@ -27,5 +27,4 @@ api_v1.include_router(search_router, tags=["Catalog"])
 
 api_v1.include_router(filters_router, tags=["Catalog"])
 
-
 api_v1.include_router(auth_router.router) 
