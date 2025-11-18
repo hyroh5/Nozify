@@ -1,0 +1,23 @@
+version: "3.9"
+services:
+  db:
+    image: mysql:8.0
+    container_name: nozify_mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root_pw     # 루트 비번
+      MYSQL_DATABASE: nozify_db        # 기본 생성 DB
+      MYSQL_USER: nozify               # 사용자 계정
+      MYSQL_PASSWORD: nozify_pw        # 사용자 비번
+    ports:
+      - "3306:3306"
+    volumes:
+      - dbdata:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u$$MYSQL_USER -p$$MYSQL_PASSWORD"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  dbdata:

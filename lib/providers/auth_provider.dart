@@ -1,69 +1,117 @@
-// auth—provider。dart
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../services/api_client.dart';
 
 class AuthUser {
+  final String id;
   final String name;
   final String email;
 
-  const AuthUser({required this.name, required this.email});
-
-  Map<String, String> toMap() => {'name': name, 'email': email};
+  const AuthUser({
+    required this.id,
+    required this.name,
+    required this.email,
+  });
 }
 
 class AuthProvider with ChangeNotifier {
   AuthUser? _user;
-
   AuthUser? get user => _user;
   bool get isLoggedIn => _user != null;
 
+  // ------------------ 자동 로그인 ------------------
   Future<void> loadFromStorage() async {
     final prefs = await SharedPreferences.getInstance();
+    final id = prefs.getString('user_id');
     final name = prefs.getString('user_name');
     final email = prefs.getString('user_email');
-    if (name != null && email != null) {
-      _user = AuthUser(name: name, email: email);
+    if (id != null && name != null && email != null) {
+      _user = AuthUser(id: id, name: name, email: email);
       notifyListeners();
     }
   }
 
+  // ------------------ 로그인 ------------------
   Future<void> signIn(String email, String password) async {
-    final prefs = await SharedPreferences.getInstance();
-    final savedEmail = prefs.getString('user_email');
-    final savedPw = prefs.getString('user_password');
-    final savedName = prefs.getString('user_name');
-
-    if (savedEmail == email && savedPw == password && savedName != null) {
-      _user = AuthUser(name: savedName, email: email);
-      await prefs.setBool('isLoggedIn', true);
-      notifyListeners();
-    } else {
-      throw Exception('로그인 정보가 일치하지 않습니다.');
-    }
+    final res = await ApiClient.I.post(
+      "/auth/login",
+      body: jsonEncode({"email": email, "password": password}),
+    );
+    final data = jsonDecode(res.body);
+    await _saveAuth(data);
   }
 
+  // ------------------ 회원가입 ------------------
   Future<void> signUp(String name, String email, String password) async {
+    final res = await ApiClient.I.post(
+      "/auth/signup",
+      body: jsonEncode({"name": name, "email": email, "password": password}),
+    );
+    final data = jsonDecode(res.body);
+    await _saveAuth(data);
+  }
+
+  // ------------------ updateUser 추가 (중요!) ------------------
+  Future<void> updateUser({
+    required String name,
+    required String email,
+    required String password,
+  }) async {
+    final body = jsonEncode({
+      "name": name,
+      "email": email,
+      "password": password.isEmpty ? null : password, // 비번변경 안 하면 null
+    });
+
+    final res = await ApiClient.I.put(
+      "/user/me",
+      body: body,
+      auth: true,
+    );
+
+    final data = jsonDecode(res.body);
+
+    // SharedPreferences 업데이트
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('user_name', name);
-    await prefs.setString('user_email', email);
-    await prefs.setString('user_password', password);
-    await prefs.setBool('isLoggedIn', true);
-    _user = AuthUser(name: name, email: email);
+    await prefs.setString('user_name', data['name']);
+    await prefs.setString('user_email', data['email']);
+    await prefs.setString('user_id', data['id']);
+
+    // Provider 상태 업데이트
+    _user = AuthUser(
+      id: data['id'],
+      name: data['name'],
+      email: data['email'],
+    );
+
     notifyListeners();
   }
 
-  Future<void> updateUser(String name, String email, String password) async {
+  // ------------------ 공통 저장 로직 ------------------
+  Future<void> _saveAuth(Map<String, dynamic> data) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('user_name', name);
-    await prefs.setString('user_email', email);
-    await prefs.setString('user_password', password);
-    _user = AuthUser(name: name, email: email);
+
+    await prefs.setString('access_token', data['access_token']);
+    await prefs.setString('refresh_token', data['refresh_token']);
+
+    await prefs.setString('user_id', data['user']['id']);
+    await prefs.setString('user_name', data['user']['name']);
+    await prefs.setString('user_email', data['user']['email']);
+
+    _user = AuthUser(
+      id: data['user']['id'],
+      name: data['user']['name'],
+      email: data['user']['email'],
+    );
+
     notifyListeners();
   }
 
+  // ------------------ 로그아웃 ------------------
   Future<void> signOut() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('isLoggedIn');
+    await prefs.clear();
     _user = null;
     notifyListeners();
   }

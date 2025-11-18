@@ -48,17 +48,22 @@ class SignUpScreen extends StatelessWidget {
                   );
                   return;
                 }
-                await context.read<AuthProvider>().signUp(
-                  nameController.text.trim(),
-                  emailController.text.trim(),
-                  pwController.text,
-                );
-
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(builder: (context) => const HomeScreen()),
-                );
-                },
+                try {
+                  await context.read<AuthProvider>().signUp(
+                    nameController.text.trim(),
+                    emailController.text.trim(),
+                    pwController.text,
+                  );
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(builder: (context) => const HomeScreen()),
+                  );
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('회원가입 실패: $e')),
+                  );
+                }
+              },
               child: const Text('가입하기', style: TextStyle(color: Colors.white, fontSize: 16)),
             ),
           ],

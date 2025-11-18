@@ -50,6 +50,7 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  // 변경 포인트만 발췌
   void _login() async {
     final email = emailController.text.trim();
     final password = pwController.text.trim();
@@ -59,14 +60,18 @@ class _LoginScreenState extends State<LoginScreen> {
         const SnackBar(content: Text('이메일과 비밀번호를 모두 입력하세요.')),
       );
       return;
-  }
+    }
     try {
-      // ✅ AuthProvider 통해 로그인 검증
-      final auth = context.read<AuthProvider>();
-      await auth.signIn(email, password);
+      await context.read<AuthProvider>().signIn(email, password);
 
-      // ✅ 로그인 성공 시 로그인 정보 저장
-      await _saveLoginInfo();
+      // 이메일만 저장(옵션)
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('saveLogin', saveLogin);
+      if (saveLogin) {
+        await prefs.setString('email', email);
+      } else {
+        await prefs.remove('email');
+      }
 
       Navigator.pushReplacement(
         context,
@@ -74,7 +79,7 @@ class _LoginScreenState extends State<LoginScreen> {
       );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('이메일 또는 비밀번호가 일치하지 않습니다.')),
+        SnackBar(content: Text('로그인 실패: $e')),
       );
     }
   }
