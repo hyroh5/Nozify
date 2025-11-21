@@ -58,20 +58,18 @@ pymysql==1.1.2
 
 # =========================================================
 # Vision / ML (CPU ONLY)
-# =========================================================
 --extra-index-url https://download.pytorch.org/whl/cpu
 torch==2.9.1+cpu
 torchvision==0.24.1+cpu
 
-onnxruntime==1.23.2
 opencv-python-headless==4.12.0.88
+# opencv-python 끌어오는 걸 차단
+opencv-python==4.12.0.88 --no-deps
+
+onnxruntime==1.23.2
 numpy==2.2.6
 pillow==12.0.0
 shapely==2.1.2
 pytesseract==0.3.13
-ultralytics==8.3.229
 
-# =========================================================
-# (삭제됨) Test-related packages
-# pytest, pluggy, Pygments 등은 제거함 — Railway 배포에 불필요
-# =========================================================
+ultralytics==8.3.229
