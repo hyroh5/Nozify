@@ -1,0 +1,27 @@
+# 1. Python 환경 및 캐시
+.venv/
+__pycache__/
+*.pyc
+*.log
+
+# 2. 버전 관리 파일
+.git/
+
+# 3. 프론트엔드 폴더 (백엔드 빌드에 불필요)
+android/
+assets/
+ios/
+lib/
+test/
+web/
+
+
+# 4. 기타 설정 파일 (선택적)
+*.metadata
+alembic.ini
+analysis_options.yaml
+devtools_options.yaml
+pubspec.lock
+pubspec.yaml
+
+# requirements.txt는 /backend 안에 있기 때문에 복사됩니다.
