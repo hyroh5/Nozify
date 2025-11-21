@@ -4,7 +4,6 @@ from typing import Optional
 import json, traceback, time
 
 import numpy as np
-import cv2
 
 from app.core.config import VisionConfig
 from app.services.vision.utils import decode_image, clamp01  # 좌표 보정용
@@ -17,13 +16,13 @@ router = APIRouter(tags=["vision"])
 
 
 def _roi_from_bbox(bbox, w, h):
-    """탐지 bbox → OCR용 ROI(라벨 중앙 띠 확보 + 패딩)"""
+    """탐지 bbox → OCR용 ROI 라벨 중앙 띠 확보 + 패딩"""
     x = int(bbox["x"] * w)
     y = int(bbox["y"] * h)
     rw = int(bbox["w"] * w)
     rh = int(bbox["h"] * h)
 
-    # 라벨 중앙 띠 확보(세로 최소 50% 확보)
+    # 라벨 중앙 띠 확보 세로 최소 50퍼 확보
     cy = y + rh // 2
     target_h = max(int(0.5 * h), rh)
     y = max(0, cy - target_h // 2)
@@ -55,13 +54,13 @@ def _text_guided_roi(texts, w, h):
     for t in texts:
         txt = (t.get("text") or "").upper()
         conf = float(t.get("confidence", 0))
-        if conf < 0.80:  # 3-2: 올림
+        if conf < 0.80:
             continue
         alnum_like = sum(ch.isalnum() or ch in "°" for ch in txt)
         if alnum_like < 2:
             continue
         b = t.get("box") or {}
-        if b.get("w", 0) <= 0.02 or b.get("h", 0) <= 0.01:  # 작은 노이즈 컷
+        if b.get("w", 0) <= 0.02 or b.get("h", 0) <= 0.01:
             continue
         good.append(b)
 
@@ -75,7 +74,7 @@ def _text_guided_roi(texts, w, h):
     x0, y0 = max(0, min(xs)), max(0, min(ys))
     x1, y1 = min(w, max(x2)), min(h, max(y2))
 
-    # 패딩(라벨 주변 넉넉히)
+    # 패딩 라벨 주변 넉넉히
     pad_x = int(0.25 * (x1 - x0))
     pad_y = int(0.20 * (y1 - y0))
     x0 = max(0, x0 - pad_x)
@@ -86,7 +85,7 @@ def _text_guided_roi(texts, w, h):
 
 
 def dedup_merge(list1, list2):
-    """같은 텍스트/근처 위치는 높은 confidence로 병합"""
+    """같은 텍스트 근처 위치는 높은 confidence로 병합"""
     out = {}
     for r in list1 + list2:
         key = (r["text"], round(r["box"]["x"], 3), round(r["box"]["y"], 3))
@@ -103,6 +102,16 @@ async def scan(
     request_id: Optional[str] = Form(None),
 ):
     t0 = time.time()
+
+    # 여기서만 cv2 로드 서버 부팅에서는 절대 로드하지 않음
+    try:
+        import cv2  # noqa: F401
+    except Exception as e:
+        print("[LOG][SCAN][ERROR] OpenCV import failed:", e)
+        raise HTTPException(
+            status_code=503,
+            detail={"error": {"code": "OPENCV_LOAD_FAIL", "message": str(e)}},
+        )
 
     # ---------- 입력 검증 ----------
     if image.content_type not in ("image/jpeg", "image/png"):
@@ -248,9 +257,7 @@ async def scan(
                         roi = _roi_from_bbox(det["bbox"], w, h)
                         try:
                             texts = run_ocr(img, roi=roi)
-                            print(
-                                f"[LOG][OCR] re-run after redetect: {len(texts)} tokens"
-                            )
+                            print(f"[LOG][OCR] re-run after redetect: {len(texts)} tokens")
                         except Exception as e:
                             print("[LOG][OCR][ERROR] re-run:", e)
             except Exception as e:
@@ -274,9 +281,7 @@ async def scan(
     t_m0 = time.time()
     try:
         match = get_match(texts, user_query or "")
-        print(
-            f"[LOG][MATCH] → final={match.get('final')}, candidates={match.get('candidates')}"
-        )
+        print(f"[LOG][MATCH] → final={match.get('final')}, candidates={match.get('candidates')}")
     except Exception as e:
         print("[LOG][MATCH][ERROR]", e)
         traceback.print_exc()
@@ -294,13 +299,7 @@ async def scan(
         and quality["brightness"] >= VisionConfig.MIN_BRIGHTNESS
         and quality.get("glare_ratio", 0.0) <= max_glare
     )
-    auto_ok = (
-        has_box
-        and good_score
-        and good_area
-        and (match["final"] is not None)
-        and good_quality
-    )
+    auto_ok = has_box and good_score and good_area and (match["final"] is not None) and good_quality
     action = "auto_advance" if auto_ok else "stay"
     print(
         f"[LOG][ACTION] has_box={has_box}, score={det['score']:.3f}, area={det['area_ratio']:.3f}, "
