@@ -3,7 +3,6 @@ from typing import Optional, Dict, Any
 import os
 import numpy as np
 import onnxruntime as ort
-from ultralytics import YOLO
 
 from app.core.config import VisionConfig
 from .preprocess import letterbox
@@ -19,24 +18,32 @@ class BottleDetector:
         self.yolo = None
         self.model_loaded = False
 
-        # 1 PyTorch pt 먼저 시도
+        # 1 PT 시도 ultralytics 자체를 여기서만 import
         try:
             pt_path = getattr(VisionConfig, "BOTTLE_MODEL_PT_PATH", "") or ""
             if pt_path and os.path.exists(pt_path):
                 print("[BottleDetector] try PT:", os.path.abspath(pt_path))
-                self.yolo = YOLO(pt_path)
-                self.model_loaded = True
+
                 try:
-                    print("[BottleDetector] model.names:", getattr(self.yolo.model, "names", None))
-                except Exception:
-                    pass
-                print("[BottleDetector] PyTorch model loaded")
+                    from ultralytics import YOLO  # 여기서만 import
+                except Exception as e:
+                    print("[BottleDetector] ultralytics import fail, skip PT:", e)
+                    YOLO = None
+
+                if YOLO is not None:
+                    self.yolo = YOLO(pt_path)
+                    self.model_loaded = True
+                    try:
+                        print("[BottleDetector] model.names:", getattr(self.yolo.model, "names", None))
+                    except Exception:
+                        pass
+                    print("[BottleDetector] PyTorch model loaded")
             else:
                 print("[BottleDetector] PT file not found:", pt_path)
         except Exception as e:
             print("YOLO PT load fail:", e)
 
-        # 2 실패 없으면 ONNX 로드
+        # 2 PT 실패면 ONNX 로드
         if not self.model_loaded:
             try:
                 onnx_path = model_path
