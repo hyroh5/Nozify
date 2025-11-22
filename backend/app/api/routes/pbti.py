@@ -4,10 +4,10 @@ from sqlalchemy.orm import Session
 from app.core.db import get_db
 from app.api.deps import get_current_user_id
 from app.schemas.pbti import (
-    PBtiQuestion,
-    PBtiSubmitRequest,
-    PBtiResultResponse,
-    PBtiRecommendationResponse
+    PBTIQuestion,
+    PBTISubmitRequest,
+    PBTIResultResponse,
+    PBTIRecommendationResponse
 )
 from app.services.pbti_service import (
     get_questions,
@@ -20,15 +20,15 @@ router = APIRouter(prefix="/pbti", tags=["pbti"])
 
 
 # 1) 질문 목록 가져오기
-@router.get("/questions", response_model=list[PBtiQuestion])
+@router.get("/questions", response_model=list[PBTIQuestion])
 def read_questions(db: Session = Depends(get_db)):
     return get_questions(db)
 
 
 # 2) 답변 제출하고 결과 생성
-@router.post("/submit", response_model=PBtiResultResponse)
+@router.post("/submit", response_model=PBTIResultResponse)
 def submit_pbti(
-    body: PBtiSubmitRequest,
+    body: PBTISubmitRequest,
     db: Session = Depends(get_db),
     current_user_id: str = Depends(get_current_user_id),
 ):
@@ -39,7 +39,7 @@ def submit_pbti(
 
 
 # 3) 특정 결과 조회
-@router.get("/result/{result_id}", response_model=PBtiResultResponse)
+@router.get("/result/{result_id}", response_model=PBTIResultResponse)
 def read_result(
     result_id: int,
     db: Session = Depends(get_db),
@@ -52,7 +52,7 @@ def read_result(
 
 
 # 4) 결과 기반 추천
-@router.get("/recommendations/{type_code}", response_model=PBtiRecommendationResponse)
+@router.get("/recommendations/{type_code}", response_model=PBTIRecommendationResponse)
 def read_recommendations(
     type_code: str,
     db: Session = Depends(get_db),

@@ -1,21 +1,21 @@
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
 
-from app.models.pbti_question import PBtiQuestion as PBtiQuestionModel
-from app.models.pbti_result import PBtiResult as PBtiResultModel
-from app.models.pbti_recommendation import PBtiRecommendation as PBtiRecommendationModel
+from app.models.pbti_question import PBTIQuestion as PBTIQuestionModel
+from app.models.pbti_result import PBTIResult as PBTIResultModel
+from app.models.pbti_recommendation import PBTIRecommendation as PBTIRecommendationModel
 
-from app.schemas.pbti import PBtiSubmitRequest
+from app.schemas.pbti import PBTISubmitRequest
 
 
 def get_questions(db: Session):
-    questions = db.query(PBtiQuestionModel).order_by(PBtiQuestionModel.id.asc()).all()
+    questions = db.query(PBTIQuestionModel).order_by(PBTIQuestionModel.id.asc()).all()
     if not questions:
-        raise HTTPException(status_code=500, detail="PBti 질문이 DB에 없습니다.")
+        raise HTTPException(status_code=500, detail="PBTI 질문이 DB에 없습니다.")
     return questions
 
 
-def submit_answers_and_make_result(db: Session, user_id_hex: str, body: PBtiSubmitRequest):
+def submit_answers_and_make_result(db: Session, user_id_hex: str, body: PBTISubmitRequest):
     # 1. 질문 로드
     questions = get_questions(db)
 
@@ -48,7 +48,7 @@ def submit_answers_and_make_result(db: Session, user_id_hex: str, body: PBtiSubm
     type_code = f"{first}-{second}"
 
     # 5. 결과 저장
-    new_result = PBtiResultModel(
+    new_result = PBTIResultModel(
         user_id=bytes.fromhex(user_id_hex),
         type_code=type_code,
         scores=axis_scores,
@@ -68,15 +68,15 @@ def submit_answers_and_make_result(db: Session, user_id_hex: str, body: PBtiSubm
 
 
 def get_result_by_id(db: Session, result_id: int, user_id_hex: str):
-    return db.query(PBtiResultModel).filter(
-        PBtiResultModel.id == result_id,
-        PBtiResultModel.user_id == bytes.fromhex(user_id_hex),
+    return db.query(PBTIResultModel).filter(
+        PBTIResultModel.id == result_id,
+        PBTIResultModel.user_id == bytes.fromhex(user_id_hex),
     ).first()
 
 
 def get_recommendations_by_type(db: Session, type_code: str):
-    recs = db.query(PBtiRecommendationModel).filter(
-        PBtiRecommendationModel.type_code == type_code
+    recs = db.query(PBTIRecommendationModel).filter(
+        PBTIRecommendationModel.type_code == type_code
     ).all()
 
     return {
