@@ -5,9 +5,12 @@ from app.models.pbti_question import PBTIQuestion as PBTIQuestionModel
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 from app.models.pbti_result import PBTIResult as PBTIResultModel
 from app.models.pbti_recommendation import PBTIRecommendation as PBTIRecommendationModel
 =======
+=======
+>>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
 =======
@@ -23,8 +26,11 @@ def get_questions(db: Session):
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
     questions = db.query(PBTIQuestionModel).order_by(PBTIQuestionModel.id.asc()).all()
 =======
+=======
+>>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
 =======
@@ -35,6 +41,9 @@ def get_questions(db: Session):
     .all()
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes

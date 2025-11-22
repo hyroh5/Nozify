@@ -9,11 +9,16 @@ class PBTIAnswerItem(BaseModel):
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 class PBTIQuestion(BaseModel):
     id: int
     text: str
     axis: AxisType
     direction: int = Field(..., description="정방향 +1, 역방향 -1")
+=======
+class PBTISubmitRequest(BaseModel):
+    answers: List[PBTIAnswerItem]
+>>>>>>> Stashed changes
 =======
 class PBTISubmitRequest(BaseModel):
     answers: List[PBTIAnswerItem]
@@ -50,6 +55,7 @@ class PBTIResultResponse(BaseModel):
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 class PBTISubmitRequest(BaseModel):
     answers: List[AnswerItem]
     owned_perfumes: Optional[List[int]] = None
@@ -70,6 +76,8 @@ class PBTIResultResponse(BaseModel):
 >>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
+=======
+>>>>>>> Stashed changes
 class PBTIRecommendationItem(BaseModel):
     perfume_id: int
     name: str
@@ -79,9 +87,15 @@ class PBTIRecommendationItem(BaseModel):
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 class PBTIRecommendationResponse(BaseModel):
     type_code: str
     recommendations: List[PBTIRecommendationItem]
+=======
+class PBTIRecommendationsResponse(BaseModel):
+    final_type: str
+    items: List[PBTIRecommendationItem]
+>>>>>>> Stashed changes
 =======
 class PBTIRecommendationsResponse(BaseModel):
     final_type: str
