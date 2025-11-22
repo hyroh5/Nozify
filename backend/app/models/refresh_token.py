@@ -12,8 +12,9 @@ class RefreshToken(Base, TimestampMixin):
     user_id: Mapped[int] = mapped_column(ForeignKey("user.id", ondelete="CASCADE"), index=True)
 
     token: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
-    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
-    revoked: Mapped[bool] = mapped_column(Boolean, default=False)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    revoked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
     user = relationship("User", backref="refresh_tokens")
 
     __table_args__ = (
