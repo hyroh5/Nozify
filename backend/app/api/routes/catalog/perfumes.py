@@ -86,9 +86,7 @@ def get_perfume(
 
             if existing_view:
                 # 2. 레코드가 있으면 viewed_at만 업데이트 (UPDATE)
-                # 이 레코드를 최근 본 항목 리스트의 맨 위로 올립니다.
                 existing_view.viewed_at = datetime.now()
-                # 변경된 객체는 session에 이미 존재하므로 별도 db.add() 필요 없음
             else:
                 # 3. 레코드가 없으면 새로 추가 (INSERT)
                 db.add(RecentView(user_id=user_id_bytes, perfume_id=p.id))
@@ -101,7 +99,6 @@ def get_perfume(
 
 @router.get("/perfumes")
 def list_perfumes(
-# ... (rest of the file remains the same) ...
     brand_id: str | None = Query(None, description="hex 형식 UUID"),
     gender: str | None = Query(None, description="men / women / unisex"),
     q: str | None = Query(None, min_length=2, description="이름/브랜드 검색"),
@@ -234,6 +231,7 @@ def search_perfumes(
     offset: int = Query(0, ge=0),
     include_total: bool = Query(False, description="총 개수 count() 포함 여부"),
     db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_current_user_id), # 💡 선택적 사용자 의존성 추가 (공개 접근 명시)
 ):
     query = db.query(Perfume)
 
