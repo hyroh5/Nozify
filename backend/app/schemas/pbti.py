@@ -1,22 +1,43 @@
-# app/schemas/pbti.py
+# backend/app/schemas/pbti.py
+from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
-from typing import List, Optional, Literal
 
-AxisType = Literal["temperature", "texture", "mood", "nature"]
+class PBTIAnswerItem(BaseModel):
+    question_id: int = Field(..., ge=1)
+    choice: int = Field(..., ge=1, le=5)
 
+<<<<<<< Updated upstream
 class PBTIQuestion(BaseModel):
     id: int
     text: str
     axis: AxisType
     direction: int = Field(..., description="정방향 +1, 역방향 -1")
+=======
+class PBTISubmitRequest(BaseModel):
+    answers: List[PBTIAnswerItem]
+>>>>>>> Stashed changes
 
-    class Config:
-        from_attributes = True
+class PBTISubmitResponse(BaseModel):
+    temperature_score: int
+    texture_score: int
+    mood_score: int
+    nature_score: int
+    final_type: str
+    type_name: str
+    confidence: float
+    answers: List[Dict[str, Any]]
 
-class AnswerItem(BaseModel):
-    question_id: int
-    score: int = Field(..., ge=1, le=5, description="1 그렇지않다 ~ 5 매우그렇다")
+class PBTIResultResponse(BaseModel):
+    temperature_score: int
+    texture_score: int
+    mood_score: int
+    nature_score: int
+    final_type: str
+    type_name: str
+    confidence: float
+    answers: List[Dict[str, Any]]
 
+<<<<<<< Updated upstream
 class PBTISubmitRequest(BaseModel):
     answers: List[AnswerItem]
     owned_perfumes: Optional[List[int]] = None
@@ -31,12 +52,20 @@ class PBTIResult(BaseModel):
 class PBTIResultResponse(BaseModel):
     result: PBTIResult
 
+=======
+>>>>>>> Stashed changes
 class PBTIRecommendationItem(BaseModel):
     perfume_id: int
     name: str
-    brand: str
+    brand_name: Optional[str] = None
     score: float
 
+<<<<<<< Updated upstream
 class PBTIRecommendationResponse(BaseModel):
     type_code: str
     recommendations: List[PBTIRecommendationItem]
+=======
+class PBTIRecommendationsResponse(BaseModel):
+    final_type: str
+    items: List[PBTIRecommendationItem]
+>>>>>>> Stashed changes

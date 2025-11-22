@@ -1,6 +1,6 @@
 # app/scripts/seed_pbti_questions.py
 from app.core.db import SessionLocal
-from app.models.pbti_question import PBtiQuestion
+from app.models.pbti_question import PBTIQuestion
 
 QUESTIONS = [
     # temperature
@@ -40,9 +40,9 @@ def run():
     db = SessionLocal()
     try:
         for text, axis, direction in QUESTIONS:
-            exists = db.query(PBtiQuestion).filter(PBtiQuestion.text == text).first()
+            exists = db.query(PBTIQuestion).filter(PBTIQuestion.text == text).first()
             if not exists:
-                db.add(PBtiQuestion(text=text, axis=axis, direction=direction))
+                db.add(PBTIQuestion(text=text, axis=axis, direction=direction))
         db.commit()
         print("seed done")
     finally:
