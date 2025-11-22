@@ -1,7 +1,7 @@
 # backend/app/models/refresh_token.py
 from __future__ import annotations
 from datetime import datetime
-from sqlalchemy import Integer, String, DateTime, ForeignKey, Index
+from sqlalchemy import Integer, String, DateTime, ForeignKey, Index, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .base import Base, TimestampMixin
 
