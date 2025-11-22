@@ -1,18 +1,44 @@
 # backend/app/api/deps.py
 from __future__ import annotations
-from fastapi import Header, HTTPException
-from typing import Optional
+
+from fastapi import Depends, Header, HTTPException
+from sqlalchemy.orm import Session
+
+from app.core.db import get_db
+from app.core.security import decode_access_token
+from app.models.user import User
+
 
 def get_current_user_id(
-    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id")
-) -> Optional[int]:
-    """
-    정수 기반 user.id 사용. 헤더가 없으면 None 반환(비개인화).
-    정수 문자열만 허용.
-    """
-    if x_user_id is None:
-        return None
-    s = x_user_id.strip()
-    if s.isdigit():
-        return int(s)
-    raise HTTPException(status_code=400, detail="invalid X-User-Id (integer)")
+    authorization: str | None = Header(default=None, alias="Authorization"),
+    db: Session = Depends(get_db),
+) -> bytes:
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Authorization header missing")
+
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Invalid Authorization header")
+
+    token = authorization.split(" ", 1)[1].strip()
+    if not token:
+        raise HTTPException(status_code=401, detail="Token missing")
+
+    try:
+        payload = decode_access_token(token)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid access token")
+
+    user_id_hex = payload.get("sub")
+    if not user_id_hex:
+        raise HTTPException(status_code=401, detail="Invalid access token no sub")
+
+    try:
+        user_id_bytes = bytes.fromhex(user_id_hex)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid user id format")
+
+    user = db.query(User).filter(User.id == user_id_bytes).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+
+    return user_id_bytes

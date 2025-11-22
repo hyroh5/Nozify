@@ -1,3 +1,4 @@
+# backend/app/models/pbti_result.py
 from __future__ import annotations
 
 from sqlalchemy import Integer, String, Boolean, ForeignKey, Index
@@ -6,13 +7,11 @@ from sqlalchemy.dialects.mysql import JSON, BINARY
 
 from .base import Base, TimestampMixin
 
-
 class PBTIResult(Base, TimestampMixin):
     __tablename__ = "pbti_result"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
 
-    # user 테이블이 BINARY(16) PK라서 여기서도 동일하게 맞춤
     user_id: Mapped[bytes] = mapped_column(
         BINARY(16),
         ForeignKey("user.id", ondelete="CASCADE"),
@@ -20,23 +19,18 @@ class PBTIResult(Base, TimestampMixin):
         nullable=False,
     )
 
-    # 각 축 점수 0~100
-    temperature_score: Mapped[int | None] = mapped_column(Integer)
-    texture_score: Mapped[int | None] = mapped_column(Integer)
-    mood_score: Mapped[int | None] = mapped_column(Integer)
-    nature_score: Mapped[int | None] = mapped_column(Integer)
+    # 0~100 점수
+    temperature_score: Mapped[int] = mapped_column(Integer, nullable=False)
+    texture_score: Mapped[int] = mapped_column(Integer, nullable=False)
+    mood_score: Mapped[int] = mapped_column(Integer, nullable=False)
+    nature_score: Mapped[int] = mapped_column(Integer, nullable=False)
 
-    # 최종 타입 코드 예 FLSN
-    final_type: Mapped[str | None] = mapped_column(String(4))
+    final_type: Mapped[str] = mapped_column(String(4), nullable=False)
+    type_name: Mapped[str] = mapped_column(String(50), nullable=False)
 
-    # 타입 별 별칭 예 반짝이는 수영 요정
-    type_name: Mapped[str | None] = mapped_column(String(50))
+    # [{"question_id": 1, "choice": 5, "axis": 1, "direction": 1, "score": 5}, ...]
+    answers: Mapped[list[dict] | None] = mapped_column(JSON)
 
-    # 원본 답안 저장
-    # 예 [{"question_id": 1, "score": 5}, ...]
-    answers: Mapped[dict | None] = mapped_column(JSON)
-
-    # 유저가 현재 선택한 결과인지
     is_active: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     user = relationship("User", backref="pbti_results")

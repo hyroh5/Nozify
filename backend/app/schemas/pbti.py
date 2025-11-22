@@ -1,42 +1,61 @@
-# app/schemas/pbti.py
+# backend/app/schemas/pbti.py
+from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
-from typing import List, Optional, Literal
 
-AxisType = Literal["temperature", "texture", "mood", "nature"]
 
-class PBTIQuestion(BaseModel):
-    id: int
-    text: str
-    axis: AxisType
-    direction: int = Field(..., description="정방향 +1, 역방향 -1")
+# =========================
+# 공통 입력 스키마
+# =========================
+class PBTIAnswerItem(BaseModel):
+    question_id: int = Field(..., ge=1)
+    choice: int = Field(..., ge=1, le=5)  # 1~5 리커트
 
-    class Config:
-        from_attributes = True
-
-class AnswerItem(BaseModel):
-    question_id: int
-    score: int = Field(..., ge=1, le=5, description="1 그렇지않다 ~ 5 매우그렇다")
 
 class PBTISubmitRequest(BaseModel):
-    answers: List[AnswerItem]
-    owned_perfumes: Optional[List[int]] = None
+    answers: List[PBTIAnswerItem]
 
-class PBTIResult(BaseModel):
-    temperature: int
-    texture: int
-    mood: int
-    nature: int
-    type_code: str
 
+# =========================
+# 제출 응답 스키마
+# routes/pbti.py submit_pbti 반환과 일치
+# =========================
+class PBTISubmitResponse(BaseModel):
+    temperature_score: int
+    texture_score: int
+    mood_score: int
+    nature_score: int
+    final_type: str
+    type_name: str
+    confidence: float
+    answers: List[Dict[str, Any]]
+
+
+# =========================
+# 결과 조회 응답 스키마
+# routes/pbti.py get_my_pbti_result 반환과 일치
+# =========================
 class PBTIResultResponse(BaseModel):
-    result: PBTIResult
+    temperature_score: int
+    texture_score: int
+    mood_score: int
+    nature_score: int
+    final_type: str
+    type_name: str
+    confidence: float
+    answers: List[Dict[str, Any]]
 
+
+# =========================
+# 추천 응답 스키마
+# routes/pbti.py recommend_by_pbti 반환과 일치
+# =========================
 class PBTIRecommendationItem(BaseModel):
     perfume_id: int
     name: str
-    brand: str
+    brand_name: Optional[str] = None
     score: float
 
-class PBTIRecommendationResponse(BaseModel):
-    type_code: str
-    recommendations: List[PBTIRecommendationItem]
+
+class PBTIRecommendationsResponse(BaseModel):
+    final_type: str
+    items: List[PBTIRecommendationItem]
