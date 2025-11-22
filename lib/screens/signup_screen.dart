@@ -48,6 +48,12 @@ class SignUpScreen extends StatelessWidget {
                   return;
                 }
                 try {
+                  // 확인용
+                  print("⚡ SIGNUP CALL => "
+                      "name=${nameController.text.trim()}, "
+                      "email=${emailController.text.trim()}, "
+                      "password=${pwController.text}");
+                  
                   await context.read<AuthProvider>().signUp(
                     nameController.text.trim(),
                     emailController.text.trim(),
