@@ -1,14 +1,14 @@
-# backend/app/api/routes/catalog/perfumes.py
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, func
 from app.core.db import get_db
 from app.models.perfume import Perfume
 from app.models.base import uuid_bytes_to_hex, uuid_hex_to_bytes, try_uuid_hex_to_bytes
-from fastapi import Header
 from app.models.recent_view import RecentView
 from app.api.deps import get_current_user_id
 from uuid import uuid4, UUID
+from app.models.user import User
+from datetime import datetime
 
 router = APIRouter(prefix="/catalog", tags=["Catalog"])
 
@@ -44,12 +44,19 @@ def get_perfume(
     perfume_id: str = Path(..., description="hex UUID 또는 fragella_id"),
     track_view: bool = Query(True, description="상세 조회 시 view_count 증가"),
     db: Session = Depends(get_db),
-    x_user_id: str | None = Header(default=None, alias="X-User-Id"),
-    
+    current_user: User | None = Depends(get_current_user_id),
 ):
     rid = uuid4().hex[:8]
     print(f"[VIEW][{rid}] track_view={track_view} id={perfume_id}")
 
+    # User 객체에서 user_id bytes를 안전하게 추출
+    user_id_bytes = None
+    if current_user is not None:
+        if hasattr(current_user, 'id'):
+            user_id_bytes = current_user.id
+        elif isinstance(current_user, bytes):
+            user_id_bytes = current_user
+        
     # 1) hex UUID 시도
     pk = try_uuid_hex_to_bytes(perfume_id)
     p = None
@@ -61,20 +68,32 @@ def get_perfume(
         p = db.query(Perfume).filter(Perfume.fragella_id == perfume_id).first()
 
     if not p:
-        # 사용자가 아예 말도 안 되는 ID 형식이면 400, 그 외엔 404
         if pk is None and "-" not in perfume_id and len(perfume_id) not in (16, 32):
             raise HTTPException(status_code=400, detail="invalid id format: hex uuid 또는 fragella_id 사용")
         raise HTTPException(status_code=404, detail="perfume not found")
         
     if track_view:
         p.view_count = int(p.view_count or 0) + 1
-        # 최근 본 항목 기록(유저 있을 때만)
-        if x_user_id:
-            try:
-                uid = uuid_hex_to_bytes(x_user_id)
-                db.add(RecentView(user_id=uid, perfume_id=p.id))
-            except Exception:
-                pass
+        
+        # 최근 본 항목 기록(유저 있을 때만) - UPSERT 로직
+        if user_id_bytes:
+            # 1. 기존 레코드가 있는지 확인 (User ID와 Perfume ID 기준)
+            existing_view = (
+                db.query(RecentView)
+                .filter(RecentView.user_id == user_id_bytes, RecentView.perfume_id == p.id)
+                .first()
+            )
+
+            if existing_view:
+                # 2. 레코드가 있으면 viewed_at만 업데이트 (UPDATE)
+                # 이 레코드를 최근 본 항목 리스트의 맨 위로 올립니다.
+                existing_view.viewed_at = datetime.now()
+                # 변경된 객체는 session에 이미 존재하므로 별도 db.add() 필요 없음
+            else:
+                # 3. 레코드가 없으면 새로 추가 (INSERT)
+                db.add(RecentView(user_id=user_id_bytes, perfume_id=p.id))
+
+        # View Count와 Recent View 변경사항을 동시에 커밋
         db.commit()
         db.refresh(p)
 
@@ -82,13 +101,14 @@ def get_perfume(
 
 @router.get("/perfumes")
 def list_perfumes(
+# ... (rest of the file remains the same) ...
     brand_id: str | None = Query(None, description="hex 형식 UUID"),
     gender: str | None = Query(None, description="men / women / unisex"),
     q: str | None = Query(None, min_length=2, description="이름/브랜드 검색"),
     sort: str | None = Query(None, description="popular|recent"),
     limit: int = Query(30, ge=1, le=100),
     offset: int = Query(0, ge=0),
-    user_id: int | None = Depends(get_current_user_id),  # 비로그인 사용자도 호출 가능
+    current_user: User | None = Depends(get_current_user_id), # 비로그인 사용자도 호출 가능
     db: Session = Depends(get_db),
 ):
     query = db.query(Perfume)
@@ -103,7 +123,7 @@ def list_perfumes(
     # 정렬
     if sort == "popular":
         query = query.order_by(Perfume.view_count.desc(), Perfume.wish_count.desc(), Perfume.id.desc())
-    else:  # default: recent
+    else:
         query = query.order_by(Perfume.created_at.desc(), Perfume.id.desc())
 
     items = query.offset(offset).limit(limit).all()
