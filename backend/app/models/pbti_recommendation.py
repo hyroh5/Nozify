@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import Integer, String, Float, ForeignKey
+from sqlalchemy import Integer, String, Float, ForeignKey, Binary # 💡 Binary 임포트 추가
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base, TimestampMixin
@@ -14,9 +14,9 @@ class PBTIRecommendation(Base, TimestampMixin):
     # PBTI 타입 코드 (예: "fresh-light", "warm-heavy", "FLSN"...)
     type_code: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
 
-    # 추천 향수 ID
-    perfume_id: Mapped[int] = mapped_column(
-        Integer,
+    # 💡 [핵심 수정] perfume_id: DB의 perfume.id가 BINARY(16)이므로 Mapped 타입을 bytes로, DDL 타입을 Binary(16)로 변경
+    perfume_id: Mapped[bytes] = mapped_column(
+        Binary(16),
         ForeignKey("perfume.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
