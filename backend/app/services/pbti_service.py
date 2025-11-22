@@ -3,9 +3,12 @@ from fastapi import HTTPException
 
 from app.models.pbti_question import PBTIQuestion as PBTIQuestionModel
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 from app.models.pbti_result import PBTIResult as PBTIResultModel
 from app.models.pbti_recommendation import PBTIRecommendation as PBTIRecommendationModel
 =======
+=======
+>>>>>>> Stashed changes
 from app.models.pbti_result import PBtiResult as PBtiResultModel
 from app.models.pbti_recommendation import PBtiRecommendation as PBtiRecommendationModel
 >>>>>>> Stashed changes
@@ -15,12 +18,18 @@ from app.schemas.pbti import PBTISubmitRequest
 
 def get_questions(db: Session):
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
     questions = db.query(PBTIQuestionModel).order_by(PBTIQuestionModel.id.asc()).all()
 =======
+=======
+>>>>>>> Stashed changes
     questions = db.query(PBTIQuestion)\
     .filter(PBTIQuestion.active == True)\
     .order_by(PBTIQuestion.axis.asc(), PBTIQuestion.id.asc())\
     .all()
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
     if not questions:
         raise HTTPException(status_code=500, detail="PBTI 질문이 DB에 없습니다.")
