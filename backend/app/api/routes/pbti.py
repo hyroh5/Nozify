@@ -10,6 +10,7 @@ from app.models.pbti_result import PBTIResult
 from app.schemas.pbti import (
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
     PBTIQuestion,
     PBTISubmitRequest,
     PBTIResultResponse,
@@ -23,12 +24,17 @@ from app.services.pbti_service import (
 =======
 =======
 >>>>>>> Stashed changes
+=======
+>>>>>>> Stashed changes
     PBTISubmitRequest,
     PBTISubmitResponse,
     PBTIResultResponse,
     PBTIRecommendationsResponse,
     PBTIRecommendationItem,
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
@@ -58,9 +64,12 @@ TYPE_NAMES = {
 
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 # 2) 답변 제출하고 결과 생성
 @router.post("/submit", response_model=PBTIResultResponse)
 =======
+=======
+>>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
 def choice_to_score(choice: int) -> int:
@@ -96,6 +105,9 @@ def get_questions(db: Session = Depends(get_db)):
 
 @router.post("/submit", response_model=PBTISubmitResponse)
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
@@ -113,11 +125,14 @@ def submit_pbti(
 
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 # 3) 특정 결과 조회
 @router.get("/result/{result_id}", response_model=PBTIResultResponse)
 def read_result(
     result_id: int,
 =======
+=======
+>>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
     for a in body.answers:
@@ -185,6 +200,9 @@ def read_result(
 @router.get("/result", response_model=PBTIResultResponse)
 def get_my_pbti_result(
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
@@ -212,11 +230,14 @@ def get_my_pbti_result(
 
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 # 4) 결과 기반 추천
 @router.get("/recommendations/{type_code}", response_model=PBTIRecommendationResponse)
 def read_recommendations(
     type_code: str,
 =======
+=======
+>>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
     confs = []
@@ -238,6 +259,9 @@ def read_recommendations(
 @router.get("/recommendations", response_model=PBTIRecommendationsResponse)
 def recommend_by_pbti(
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
