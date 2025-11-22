@@ -4,6 +4,8 @@
 // ${Env.baseUrl}${Env.apiPrefix}/나머지 상세 주소..
 
 class Env {
-  static const String baseUrl = "https://nozify-production.up.railway.app";
+  // 에뮬레이터에서 PC 로컬 FastAPI로 접근할 때:
+  // Android emulator: 10.0.2.2, iOS simulator: 127.0.0.1
+  static const String baseUrl = "https://nozify-production.up.railway.app"; // 배포 시 교체
   static const String apiPrefix = "/api/v1";
 }
