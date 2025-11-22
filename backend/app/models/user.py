@@ -11,7 +11,7 @@ class User(Base, TimestampMixin):
 
     id: Mapped[bytes] = mapped_column(BINARY(16), primary_key=True, default=lambda: uuid.uuid4().bytes)
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
-    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    password_hash: Mapped[str] = mapped_column(String(1024), nullable=False)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
 
     gender: Mapped[str | None] = mapped_column(String(20))
