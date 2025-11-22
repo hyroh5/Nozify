@@ -13,7 +13,7 @@ class RefreshToken(Base, TimestampMixin):
 
     token: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
-
+    revoked: Mapped[bool] = mapped_column(Boolean, default=False)
     user = relationship("User", backref="refresh_tokens")
 
     __table_args__ = (
