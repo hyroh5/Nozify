@@ -2,7 +2,7 @@ from __future__ import annotations
 import uuid
 from sqlalchemy.dialects.mysql import BINARY
 from sqlalchemy import Integer, String
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .base import Base, TimestampMixin
 
 
@@ -16,3 +16,9 @@ class User(Base, TimestampMixin):
 
     gender: Mapped[str | None] = mapped_column(String(20))
     birth_year: Mapped[int | None] = mapped_column(Integer)
+
+    refresh_tokens: Mapped[list["RefreshToken"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan", 
+        passive_deletes=True
+    )
