@@ -1,16 +1,29 @@
-# backend/app/models/purchase_history.py
+# backend/app/models/purchase_history.py 수정 버전 필요시
 from __future__ import annotations
 from datetime import date
 from sqlalchemy import Integer, Date, ForeignKey, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.dialects.mysql import BINARY
 from .base import Base, TimestampMixin
 
 class PurchaseHistory(Base, TimestampMixin):
     __tablename__ = "purchase_history"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("user.id", ondelete="CASCADE"), index=True)
-    perfume_id: Mapped[int] = mapped_column(ForeignKey("perfume.id", ondelete="CASCADE"), index=True)
+
+    user_id: Mapped[bytes] = mapped_column(
+        BINARY(16),
+        ForeignKey("user.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+
+    perfume_id: Mapped[bytes] = mapped_column(
+        BINARY(16),
+        ForeignKey("perfume.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
 
     purchase_date: Mapped[date | None] = mapped_column(Date, nullable=True)
 
