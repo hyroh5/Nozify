@@ -1,7 +1,9 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'auth_provider.dart';
+
+import '../models/user.dart'; // ✅ 반드시 추가
+// 기존 auth_provider.dart import는 지움 (안 쓰임)
 
 /// ---------------------------------------
 /// 📘 Record 모델
@@ -35,24 +37,24 @@ class Record {
 class CalendarProvider extends ChangeNotifier {
   Map<String, List<Record>> records = {}; // key: 'YYYY-MM-DD'
 
-  AuthUser? _user; // 현재 로그인한 유저 정보
-  AuthUser? get user => _user;
+  User? _user;                        // ✅ AuthProvider → User 로 변경
+  User? get user => _user;            // Getter 유지
 
   /// ✅ 로그인한 유저 정보 설정
-  void setUser(AuthUser? user) {
+  void setUser(User? user) {          // ✅ 타입 변경
     _user = user;
   }
 
   /// ✅ 유저별 key 생성
   String _keyForUser(String baseKey) {
     if (_user == null) return baseKey;
-    final emailSafe = _user!.email.replaceAll('.', '_');
+    final emailSafe = _user!.email.replaceAll('.', '_'); // 오류 해결됨
     return '${baseKey}_$emailSafe';
   }
 
   /// ✅ 기록 추가
   Future<void> addRecord(DateTime date, Record record) async {
-    if (_user == null) return; // 로그인 안 되어 있으면 무시
+    if (_user == null) return;
     final key = _key(date);
     records.putIfAbsent(key, () => []).add(record);
     await _saveToStorage();
@@ -102,17 +104,17 @@ class CalendarProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// ✅ 모든 기록 초기화 (로그아웃 시)
+  /// ✅ 모든 기록 초기화
   Future<void> clearAll() async {
     records.clear();
     notifyListeners();
   }
 
-  /// ✅ 날짜 키
+  /// 날짜 키 생성
   String _key(DateTime date) =>
       '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
 
-  /// ✅ 특정 날짜에 기록이 있는지 여부
+  /// 특정 날짜 기록 여부
   bool hasRecord(DateTime date) {
     final key = _key(date);
     return records.containsKey(key) && records[key]!.isNotEmpty;
