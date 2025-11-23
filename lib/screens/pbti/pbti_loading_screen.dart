@@ -1,11 +1,16 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../../providers/auth_provider.dart';
+import '../../providers/pbti_provider.dart';
 import 'pbti_result_screen.dart';
+import 'pbti_intro_screen.dart';
 
 class PBTILoadingScreen extends StatefulWidget {
-  final Map<String, double> result; // 결과를 받는 필드
+  /// [{ "question_id": 1, "choice": 5 }, ...]
+  final List<Map<String, int>> answers;
 
-  const PBTILoadingScreen({super.key, required this.result});
+  const PBTILoadingScreen({super.key, required this.answers});
 
   @override
   State<PBTILoadingScreen> createState() => _PBTILoadingScreenState();
@@ -15,17 +20,48 @@ class _PBTILoadingScreenState extends State<PBTILoadingScreen> {
   @override
   void initState() {
     super.initState();
-    // 3초 후 결과 페이지로 이동하면서 동일 result 전달
-    Timer(const Duration(seconds: 3), () {
+    _submit();
+  }
+
+  Future<void> _submit() async {
+    final auth = context.read<AuthProvider>();
+    final pbti = context.read<PbtiProvider>();
+
+    if (!auth.isLoggedIn) {
       if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('로그인 후 테스트를 진행할 수 있습니다.')),
+      );
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const PBTIIntroScreen()),
+      );
+      return;
+    }
+
+    try {
+      final result = await pbti.submitPbti(auth, widget.answers);
+
+      if (!mounted) return;
+      // 성공하면 결과 화면으로
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (_) => PBTIResultScreen(result: widget.result),
-          // 전달 (question -> loading -> result 순으로 결과가 전달됨)
+          builder: (_) => PBTIResultScreen(result: result),
         ),
       );
-    });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('PBTI 분석 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.'),
+        ),
+      );
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const PBTIIntroScreen()),
+      );
+    }
   }
 
   @override
@@ -36,7 +72,6 @@ class _PBTILoadingScreenState extends State<PBTILoadingScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // 회전 로딩 인디케이터
             SizedBox(
               width: 60,
               height: 60,
