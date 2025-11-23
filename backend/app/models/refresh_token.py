@@ -16,7 +16,7 @@ class RefreshToken(Base, TimestampMixin):
         index=True
     )
 
-    token: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    token: Mapped[str] = mapped_column(String(512), nullable=False, index=True)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     revoked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 

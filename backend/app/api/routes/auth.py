@@ -24,7 +24,7 @@ def signup(data: UserCreate, db: Session = Depends(get_db)):
     if db.query(User).filter(User.email == data.email).first():
         raise HTTPException(status_code=400, detail="이미 존재하는 이메일입니다.")
 
-    # 비밀번호 해시 저장 - 모델 컬럼명은 'password_hash' 기준
+    # 비밀번호 해시 저장
     hashed_pw = hash_password(data.password)
     new_user = User(
         name=data.name,
@@ -35,14 +35,24 @@ def signup(data: UserCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(new_user)
 
-    # 핵심: BINARY(16) -> hex 문자열로 변환
     uid_hex = uuid_bytes_to_hex(new_user.id)
 
-    # 토큰 payload의 sub도 문자열(hex)로
     access_token = create_access_token({"sub": uid_hex})
     refresh_token = create_refresh_token({"sub": uid_hex})
-    rt = RefreshToken(user_id=new_user.id, token=refresh_token, revoked=False)
-    db.add(rt); db.commit()
+
+    # 🔹 혹시라도 기존 토큰이 남아있으면 전부 revoke
+    db.query(RefreshToken).filter(
+        RefreshToken.user_id == new_user.id,
+        RefreshToken.revoked == False
+    ).update({"revoked": True})
+
+    rt = RefreshToken(
+        user_id=new_user.id,
+        token=refresh_token,
+        revoked=False,
+    )
+    db.add(rt)
+    db.commit()
 
     return {
         "access_token": access_token,
@@ -61,14 +71,24 @@ def login(data: UserLogin, db: Session = Depends(get_db)):
     if not user or not verify_password(data.password, user.password_hash):
         raise HTTPException(status_code=401, detail="이메일 또는 비밀번호가 잘못되었습니다.")
 
-    # 핵심: BINARY(16) -> hex 문자열로 변환
     uid_hex = uuid_bytes_to_hex(user.id)
 
-    # 토큰 payload의 sub도 문자열(hex)로
     access_token = create_access_token({"sub": uid_hex})
     refresh_token = create_refresh_token({"sub": uid_hex})
-    rt = RefreshToken(user_id=user.id, token=refresh_token, revoked=False)
-    db.add(rt); db.commit()
+
+    # 🔹 기존 유효한 refresh 토큰들 전부 revoke
+    db.query(RefreshToken).filter(
+        RefreshToken.user_id == user.id,
+        RefreshToken.revoked == False
+    ).update({"revoked": True})
+
+    rt = RefreshToken(
+        user_id=user.id,
+        token=refresh_token,
+        revoked=False,
+    )
+    db.add(rt)
+    db.commit()
 
     return {
         "access_token": access_token,
@@ -79,6 +99,7 @@ def login(data: UserLogin, db: Session = Depends(get_db)):
             "email": user.email,
         },
     }
+
 
 @router.post("/refresh", response_model=TokenResponse)
 def refresh_token(payload: RefreshRequest, db: Session = Depends(get_db)):
