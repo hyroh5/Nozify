@@ -47,7 +47,6 @@ class _MyInfoScreenState extends State<MyInfoScreen> {
       await context.read<AuthProvider>().updateUser(
         name: name,
         email: email,
-        password: password,
       );
 
       ScaffoldMessenger.of(context).showSnackBar(

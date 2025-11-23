@@ -2,7 +2,6 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:carousel_slider/carousel_slider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../providers/auth_provider.dart';
 import '../../providers/pbti_provider.dart';
@@ -23,7 +22,9 @@ class PbtiMainScreen extends StatefulWidget {
 class _PbtiMainScreenState extends State<PbtiMainScreen> {
   int _currentPage = 0;
   int _selectedIndex = 2;
-  List<Map<String, String>> pbtiResults = [];
+
+  /// 서버에서 받아온 PBTI 코드 리스트 (최신순)
+  List<String> pbtiResults = [];
 
   @override
   void initState() {
@@ -37,21 +38,11 @@ class _PbtiMainScreenState extends State<PbtiMainScreen> {
     });
   }
 
+  /// 삭제는 일단 클라이언트에서만 숨기는 용도로 처리
   Future<void> _deleteType(int index) async {
-    final prefs = await SharedPreferences.getInstance();
     setState(() {
       pbtiResults.removeAt(index);
     });
-
-    final auth = context.read<AuthProvider>();
-    if (!auth.isLoggedIn) return;
-
-    final key = 'pbtiResults_${auth.user!.email}';
-    final toSave =
-    pbtiResults.map((r) => "${r['type']},${r['image']}").toList();
-    await prefs.setStringList(key, toSave);
-
-    await context.read<PbtiProvider>().loadResults(auth);
   }
 
   @override
@@ -70,7 +61,6 @@ class _PbtiMainScreenState extends State<PbtiMainScreen> {
       backgroundColor: Colors.white,
       endDrawer: const CustomDrawer(),
 
-      // 전체 스크롤 가능 화면
       body: SingleChildScrollView(
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 24),
@@ -114,7 +104,7 @@ class _PbtiMainScreenState extends State<PbtiMainScreen> {
                                       sigmaY: isCenter ? 0 : 5,
                                     ),
                                     child: Image.asset(
-                                      pbtiResults[index]["image"]!,
+                                      getPbtiImage(pbtiResults[index]),
                                       height: isCenter ? 150 : 120,
                                       fit: BoxFit.contain,
                                     ),
@@ -122,7 +112,7 @@ class _PbtiMainScreenState extends State<PbtiMainScreen> {
                                   if (isCenter) ...[
                                     const SizedBox(height: 16),
                                     Text(
-                                      pbtiResults[index]["type"]!,
+                                      pbtiResults[index],
                                       style: const TextStyle(
                                         fontSize: 36,
                                         fontWeight: FontWeight.bold,
@@ -141,7 +131,8 @@ class _PbtiMainScreenState extends State<PbtiMainScreen> {
                               onTap: () => Navigator.pushReplacement(
                                 context,
                                 MaterialPageRoute(
-                                    builder: (_) => const PBTIIntroScreen()),
+                                    builder: (_) =>
+                                    const PBTIIntroScreen()),
                               ),
                               child: Container(
                                 color: Colors.white,
@@ -173,8 +164,10 @@ class _PbtiMainScreenState extends State<PbtiMainScreen> {
                               top: 8,
                               right: 12,
                               child: IconButton(
-                                icon: const Icon(Icons.close,
-                                    color: Colors.black54),
+                                icon: const Icon(
+                                  Icons.close,
+                                  color: Colors.black54,
+                                ),
                                 onPressed: () => _deleteType(index),
                               ),
                             ),
@@ -187,7 +180,7 @@ class _PbtiMainScreenState extends State<PbtiMainScreen> {
 
               const SizedBox(height: 40),
 
-              // 🔹 내 취향 반영 추천 향수 (고정)
+              // 🔹 내 취향 반영 추천 향수 (지금은 더미 데이터)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Column(
@@ -203,7 +196,6 @@ class _PbtiMainScreenState extends State<PbtiMainScreen> {
                     const SizedBox(height: 12),
                     const Divider(color: Colors.black12, thickness: 1),
 
-                    // 향수 카드 리스트
                     SizedBox(
                       height: 180,
                       child: ListView(
@@ -236,7 +228,6 @@ class _PbtiMainScreenState extends State<PbtiMainScreen> {
         ),
       ),
 
-      // 하단바 유지
       bottomNavigationBar: BottomNavBar(
         currentIndex: _selectedIndex,
         onTap: (index) {
@@ -301,5 +292,46 @@ class _PbtiMainScreenState extends State<PbtiMainScreen> {
         ),
       ),
     );
+  }
+
+  /// PBTI 코드 → 캐릭터 이미지 매핑
+  String getPbtiImage(String code) {
+    const base = 'assets/images/PBTI';
+    switch (code) {
+      case 'FHPM':
+        return '$base/FHPM.png';
+      case 'FHPN':
+        return '$base/FHPN.png';
+      case 'FHSM':
+        return '$base/FHSM.png';
+      case 'FHSN':
+        return '$base/FHSN.png';
+      case 'FLPM':
+        return '$base/FLPM.png';
+      case 'FLPN':
+        return '$base/FLPN.png';
+      case 'FLSM':
+        return '$base/FLSM.png';
+      case 'FLSN':
+        return '$base/FLSN.png';
+      case 'WHPM':
+        return '$base/WHPM.png';
+      case 'WHPN':
+        return '$base/WHPN.png';
+      case 'WHSM':
+        return '$base/WHSM.png';
+      case 'WHSN':
+        return '$base/WHSN.png';
+      case 'WLPM':
+        return '$base/WLPM.png';
+      case 'WLPN':
+        return '$base/WLPN.png';
+      case 'WLSM':
+        return '$base/WLSM.png';
+      case 'WLSN':
+        return '$base/WLSN.png';
+      default:
+        return '$base/FLSN.png';
+    }
   }
 }
