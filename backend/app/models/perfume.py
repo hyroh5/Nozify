@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, DECIMAL, JSON, TIMESTAMP, func, UniqueConstraint, Index
+from sqlalchemy import Column, Integer, String, ForeignKey, Float, DECIMAL, JSON, TIMESTAMP, func, UniqueConstraint, Index
 from sqlalchemy.dialects.mysql import BINARY
 from sqlalchemy.orm import relationship
 from app.models.base import Base
@@ -45,6 +45,18 @@ class Perfume(Base):
     general_notes = Column(JSON, nullable=True)
     season_ranking = Column(JSON, nullable=True)
     occasion_ranking = Column(JSON, nullable=True)
+
+    # --- PBTI 프로파일 점수 컬럼 (새로 추가) ---
+    # F/W (Fresh/Warm) 축 점수
+    F_W_Score = Column(Float, default=0.0, nullable=True)
+    # L/H (Light/Heavy) 축 점수
+    L_H_Score = Column(Float, default=0.0, nullable=True)
+    # S/P (Simple/Polymorphic) 축 점수
+    S_P_Score = Column(Float, default=0.0, nullable=True)
+    # N/M (Natural/Manmade) 축 점수
+    N_M_Score = Column(Float, default=0.0, nullable=True)
+    # 계산된 PBTI 타입 (예: FLSM)
+    pbti_type = Column(String(4), default="", nullable=True)
 
     # --- 카운터 필드 ---
     view_count = Column(Integer, default=0, nullable=True)

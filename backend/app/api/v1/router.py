@@ -29,4 +29,4 @@ api_v1.include_router(wishlist_router, prefix="/user", tags=["User"])
 api_v1.include_router(auth_router.router) 
 
 # PBTI
-api_v1.include_router(pbti_router, prefix="/pbti", tags=["PBTI"])
+api_v1.include_router(pbti_router, tags=["PBTI"])

@@ -1,16 +1,21 @@
 # backend/app/services/pbti_service.py
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload 
+from sqlalchemy import desc 
 from fastapi import HTTPException
+from typing import Dict, Any, Union
 
+# 모델 임포트는 프로젝트 구조에 맞게 경로를 확인하세요.
 from app.models.pbti_question import PBTIQuestion
 from app.models.pbti_result import PBTIResult
 from app.models.pbti_recommendation import PBTIRecommendation
+from app.models.perfume import Perfume # Perfume 모델 임포트를 가정합니다.
+from app.models.brand import Brand # Brand 모델 임포트를 가정합니다.
 
 from app.schemas.pbti import PBTISubmitRequest
 
 
 # -------------------------------
-# 질문 목록 가져오기
+# 질문 목록 가져오기 (기존 유지)
 # -------------------------------
 def get_questions(db: Session):
     questions = (
@@ -27,7 +32,7 @@ def get_questions(db: Session):
 
 
 # -------------------------------
-# 답변 제출 + 결과 계산 + 저장
+# 답변 제출 + 결과 계산 + 저장 (기존 유지)
 # -------------------------------
 def submit_answers_and_make_result(db: Session, user_id_hex: str, body: PBTISubmitRequest):
     # 1 질문 로드
@@ -83,9 +88,9 @@ def submit_answers_and_make_result(db: Session, user_id_hex: str, body: PBTISubm
 
 
 # -------------------------------
-# 특정 결과 조회
+# 특정 결과 조회 (기존 유지)
 # -------------------------------
-def get_result_by_id(db: Session, result_id: int, user_id_hex: str):
+def get_result_by_id(db: Session, result_id: int, user_id_hex: str) -> PBTIResult | None:
     return (
         db.query(PBTIResult)
         .filter(
@@ -97,22 +102,45 @@ def get_result_by_id(db: Session, result_id: int, user_id_hex: str):
 
 
 # -------------------------------
-# 추천 조회
+# 가장 최근 PBTI 결과 조회
 # -------------------------------
-def get_recommendations_by_type(db: Session, type_code: str):
+def get_latest_pbti_result(db: Session, user_id_hex: str) -> PBTIResult | None:
+    """주어진 사용자 ID의 가장 최근 PBTI 테스트 결과를 조회합니다."""
+    return (
+        db.query(PBTIResult)
+        .filter(PBTIResult.user_id == bytes.fromhex(user_id_hex))
+        .order_by(desc(PBTIResult.created_at))
+        .first()
+    )
+
+
+# -------------------------------
+# ⭐️ 추천 조회 (함수 이름: get_pbti_recommendations_by_type)
+# -------------------------------
+def get_pbti_recommendations_by_type(db: Session, type_code: str, limit: int = 10) -> Dict[str, Any]:
+    """
+    주어진 PBTI 타입에 대한 향수 추천 목록을 N+1 문제 없이 조회합니다.
+    """
+    
+    # N+1 쿼리 해결을 위해 joinedload 사용
     recs = (
         db.query(PBTIRecommendation)
         .filter(PBTIRecommendation.type_code == type_code)
+        # Perfume -> Brand까지 미리 로드합니다.
+        .options(joinedload(PBTIRecommendation.perfume).joinedload(Perfume.brand)) 
+        .order_by(desc(PBTIRecommendation.match_score))
+        .limit(limit)
         .all()
     )
 
+    # 응답 구조 생성
     return {
         "type_code": type_code,
         "perfumes": [
             {
-                "perfume_id": r.perfume_id,
+                "perfume_id": str(r.perfume_id.hex()), # UUID 바이트를 16진수 문자열로 변환
                 "name": r.perfume.name,
-                "brand": r.perfume.brand.name,
+                "brand_name": r.perfume.brand.name,
                 "image_url": r.perfume.image_url,
                 "match_score": r.match_score,
             }

@@ -50,7 +50,7 @@ class PBTIResultResponse(BaseModel):
 # routes/pbti.py recommend_by_pbti 반환과 일치
 # =========================
 class PBTIRecommendationItem(BaseModel):
-    perfume_id: int
+    perfume_id: str
     name: str
     brand_name: Optional[str] = None
     score: float
