@@ -23,14 +23,15 @@ except ImportError:
 # B. .env 파일 로드 (스크립트 위치: backend/app/services/)
 # .env 파일이 backend/ 에 있으므로 상대 경로 '../../.env'를 사용합니다.
 # .env 파일 로드 후, 환경 변수를 os.environ에서 사용할 수 있게 됩니다.
-dotenv.load_dotenv(dotenv_path='../../.env')
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+ENV_PATH = os.path.normpath(os.path.join(BASE_DIR, "../../.env"))
 
-# .env 파일에서 DATABASE_URL을 읽어옵니다.
+# 환경 변수 로드
+dotenv.load_dotenv(ENV_PATH)
+
 DATABASE_URL = os.environ.get("DATABASE_URL")
-
 if not DATABASE_URL:
     print("오류: 환경 변수 DATABASE_URL을 찾을 수 없습니다.")
-    print(".env 파일에 'DATABASE_URL=...' 항목이 있는지 확인하십시오.")
     exit(1)
 
 # MySQL URL 포맷 변환 (pymysql 드라이버 사용 가정)
