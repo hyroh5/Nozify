@@ -1,12 +1,14 @@
 // main。dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:sw_showcase/providers/purchased_provider.dart';
+import 'package:sw_showcase/providers/wishlist_provider.dart';
 import 'package:sw_showcase/screens/loading_screen.dart';
 import 'providers/calendar_provider.dart';
 import 'providers/auth_provider.dart';
 import 'providers/recent_perfume_provider.dart';
 import 'providers/pbti_provider.dart';
-import 'screens/home_screen.dart';
+import 'providers/accord_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -21,7 +23,10 @@ void main() async {
         ChangeNotifierProvider.value(value: calendarProvider),
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => RecentPerfumeProvider()),
+        ChangeNotifierProvider(create: (_) => WishlistProvider()),
+        ChangeNotifierProvider(create: (_) => PurchasedProvider()),
         ChangeNotifierProvider(create: (_) => PbtiProvider()),
+        ChangeNotifierProvider(create: (_) => AccordProvider()),
       ],
       child: const MyApp(),
     ),

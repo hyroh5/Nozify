@@ -38,7 +38,6 @@ class _PbtiMainScreenState extends State<PbtiMainScreen> {
     });
   }
 
-  /// 삭제는 일단 클라이언트에서만 숨기는 용도로 처리
   Future<void> _deleteType(int index) async {
     setState(() {
       pbtiResults.removeAt(index);
@@ -131,8 +130,8 @@ class _PbtiMainScreenState extends State<PbtiMainScreen> {
                               onTap: () => Navigator.pushReplacement(
                                 context,
                                 MaterialPageRoute(
-                                    builder: (_) =>
-                                    const PBTIIntroScreen()),
+                                  builder: (_) => const PBTIIntroScreen(),
+                                ),
                               ),
                               child: Container(
                                 color: Colors.white,
@@ -159,6 +158,7 @@ class _PbtiMainScreenState extends State<PbtiMainScreen> {
                                 ),
                               ),
                             ),
+
                           if (!isAddCard && isCenter)
                             Positioned(
                               top: 8,
@@ -180,7 +180,7 @@ class _PbtiMainScreenState extends State<PbtiMainScreen> {
 
               const SizedBox(height: 40),
 
-              // 🔹 내 취향 반영 추천 향수 (지금은 더미 데이터)
+              // 🔹 내 취향 반영 추천 향수 (더미)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Column(
@@ -202,16 +202,19 @@ class _PbtiMainScreenState extends State<PbtiMainScreen> {
                         scrollDirection: Axis.horizontal,
                         children: [
                           _buildPerfumeCard({
+                            'id': 'pbti001',
                             'brand': '딥디크',
                             'name': '오에도',
                             'image': 'assets/images/perfume001.png'
                           }),
                           _buildPerfumeCard({
+                            'id': 'pbti002',
                             'brand': '디올',
                             'name': '소바쥬 엘릭서',
                             'image': 'assets/images/perfume002.png'
                           }),
                           _buildPerfumeCard({
+                            'id': 'pbti003',
                             'brand': '입생로랑',
                             'name': '라 뉘드롬므',
                             'image': 'assets/images/perfume003.png'
@@ -243,13 +246,19 @@ class _PbtiMainScreenState extends State<PbtiMainScreen> {
     );
   }
 
+  /// ------------------------
+  /// 향수 카드 위젯
+  /// ------------------------
   Widget _buildPerfumeCard(Map<String, String> perfume) {
     return GestureDetector(
       onTap: () {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => const PerfumeDetailScreen(fromStorage: false),
+            builder: (_) => PerfumeDetailScreen(
+              perfumeId: perfume['id']!,  // 🔥 id 필수 전달
+              fromStorage: false,
+            ),
           ),
         );
       },
@@ -281,7 +290,9 @@ class _PbtiMainScreenState extends State<PbtiMainScreen> {
               child: Text(
                 perfume['name'] ?? '',
                 style: const TextStyle(
-                    fontWeight: FontWeight.w600, fontSize: 11),
+                  fontWeight: FontWeight.w600,
+                  fontSize: 11,
+                ),
                 textAlign: TextAlign.center,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -294,44 +305,29 @@ class _PbtiMainScreenState extends State<PbtiMainScreen> {
     );
   }
 
+  /// ------------------------
   /// PBTI 코드 → 캐릭터 이미지 매핑
+  /// ------------------------
   String getPbtiImage(String code) {
     const base = 'assets/images/PBTI';
     switch (code) {
-      case 'FHPM':
-        return '$base/FHPM.png';
-      case 'FHPN':
-        return '$base/FHPN.png';
-      case 'FHSM':
-        return '$base/FHSM.png';
-      case 'FHSN':
-        return '$base/FHSN.png';
-      case 'FLPM':
-        return '$base/FLPM.png';
-      case 'FLPN':
-        return '$base/FLPN.png';
-      case 'FLSM':
-        return '$base/FLSM.png';
-      case 'FLSN':
-        return '$base/FLSN.png';
-      case 'WHPM':
-        return '$base/WHPM.png';
-      case 'WHPN':
-        return '$base/WHPN.png';
-      case 'WHSM':
-        return '$base/WHSM.png';
-      case 'WHSN':
-        return '$base/WHSN.png';
-      case 'WLPM':
-        return '$base/WLPM.png';
-      case 'WLPN':
-        return '$base/WLPN.png';
-      case 'WLSM':
-        return '$base/WLSM.png';
-      case 'WLSN':
-        return '$base/WLSN.png';
-      default:
-        return '$base/FLSN.png';
+      case 'FHPM': return '$base/FHPM.png';
+      case 'FHPN': return '$base/FHPN.png';
+      case 'FHSM': return '$base/FHSM.png';
+      case 'FHSN': return '$base/FHSN.png';
+      case 'FLPM': return '$base/FLPM.png';
+      case 'FLPN': return '$base/FLPN.png';
+      case 'FLSM': return '$base/FLSM.png';
+      case 'FLSN': return '$base/FLSN.png';
+      case 'WHPM': return '$base/WHPM.png';
+      case 'WHPN': return '$base/WHPN.png';
+      case 'WHSM': return '$base/WHSM.png';
+      case 'WHSN': return '$base/WHSN.png';
+      case 'WLPM': return '$base/WLPM.png';
+      case 'WLPN': return '$base/WLPN.png';
+      case 'WLSM': return '$base/WLSM.png';
+      case 'WLSN': return '$base/WLSN.png';
+      default: return '$base/FLSN.png';
     }
   }
 }

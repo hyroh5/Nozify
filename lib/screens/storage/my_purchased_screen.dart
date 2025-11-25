@@ -1,11 +1,13 @@
+// lib/screens/storage/my_purchased_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../../widgets/topbar/appbar_ver2.dart';
 import '../../widgets/bottom_navbar.dart';
 import '../home_screen.dart';
 import '../perfume_detail_screen.dart';
-import '../../providers/storage_manager.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/purchased_provider.dart';
 import '../../widgets/custom_drawer.dart';
 
 class MyPurchasedScreen extends StatefulWidget {
@@ -17,36 +19,34 @@ class MyPurchasedScreen extends StatefulWidget {
 
 class _MyPurchasedScreenState extends State<MyPurchasedScreen> {
   int _selectedIndex = 3;
-  List<Map<String, String>> perfumes = [];
 
   @override
   void initState() {
     super.initState();
-    _loadPurchased();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final auth = context.read<AuthProvider>();
+
+      if (!auth.isLoggedIn) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("로그인 후 이용할 수 있습니다.")),
+        );
+        return;
+      }
+
+      await context.read<PurchasedProvider>().fetchPurchased();
+    });
   }
-
-  Future<void> _loadPurchased() async {
-    final auth = context.read<AuthProvider>();
-    final email = auth.user?.email ?? 'guest';
-
-    if (!auth.isLoggedIn) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("로그인 후 이용할 수 있습니다.")),
-      );
-      setState(() => perfumes = []);
-      return;
-    }
-
-    final list = await StorageManager.loadList(StorageManager.purchasedKey, email);
-    setState(() => perfumes = list);
-  }
-
 
   @override
   Widget build(BuildContext context) {
-    final List<List<Map<String, String>>> rows = [];
+    final provider = context.watch<PurchasedProvider>();
+    final perfumes = provider.items;
+
+    final List<List<PurchasedItem>> rows = [];
     for (int i = 0; i < perfumes.length; i += 3) {
-      rows.add(perfumes.sublist(i, (i + 3 > perfumes.length) ? perfumes.length : i + 3));
+      rows.add(
+        perfumes.sublist(i, (i + 3 > perfumes.length) ? perfumes.length : i + 3),
+      );
     }
 
     return Scaffold(
@@ -111,13 +111,16 @@ class _MyPurchasedScreenState extends State<MyPurchasedScreen> {
     );
   }
 
-  Widget _buildPerfumeCard(Map<String, String> perfume) {
+  Widget _buildPerfumeCard(PurchasedItem perfume) {
     return GestureDetector(
       onTap: () {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => const PerfumeDetailScreen(fromStorage: true),
+            builder: (_) => PerfumeDetailScreen(
+              perfumeId: perfume.perfumeId,
+              fromStorage: true,
+            ),
           ),
         );
       },
@@ -127,8 +130,15 @@ class _MyPurchasedScreenState extends State<MyPurchasedScreen> {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             ClipRRect(
-              child: Image.asset(
-                perfume['image'] ?? 'assets/images/dummy.jpg',
+              child: perfume.imageUrl != null && perfume.imageUrl!.isNotEmpty
+                  ? Image.network(
+                perfume.imageUrl!,
+                height: 108,
+                width: 90,
+                fit: BoxFit.cover,
+              )
+                  : Image.asset(
+                'assets/images/dummy.jpg',
                 height: 108,
                 width: 90,
                 fit: BoxFit.cover,
@@ -136,15 +146,18 @@ class _MyPurchasedScreenState extends State<MyPurchasedScreen> {
             ),
             const SizedBox(height: 6),
             Text(
-              perfume['brand'] ?? '',
+              perfume.brandName,
               style: const TextStyle(color: Colors.grey, fontSize: 10),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
             const SizedBox(height: 2),
             Text(
-              perfume['name'] ?? '',
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+              perfume.name,
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 11,
+              ),
               textAlign: TextAlign.center,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,

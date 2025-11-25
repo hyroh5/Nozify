@@ -1,10 +1,13 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../screens/home_screen.dart';
 import '../providers/auth_provider.dart';
 import '../providers/recent_perfume_provider.dart';
 import '../providers/calendar_provider.dart';
+import '../providers/wishlist_provider.dart';
+import '../providers/purchased_provider.dart';
 
 class LoadingScreen extends StatefulWidget {
   const LoadingScreen({super.key});
@@ -21,21 +24,30 @@ class _LoadingScreenState extends State<LoadingScreen> {
   }
 
   Future<void> _bootstrap() async {
-    // ✅ Auth & Recent Load
+    // 1) 유저 정보 로드 (SharedPreferences)
     await context.read<AuthProvider>().loadFromStorage();
-    await context.read<RecentPerfumeProvider>().loadRecent();
-
-    // ✅ CalendarProvider에 로그인 유저 반영
     final auth = context.read<AuthProvider>();
+    final user = auth.user;
+
+    // 2) 최근 본 향수 (API)
+    await context.read<RecentPerfumeProvider>().fetchRecent();
+
+    // 3) 캘린더 로컬 저장된 데이터 불러오기
     final calendar = context.read<CalendarProvider>();
-    calendar.setUser(auth.user);
+    calendar.setUser(user);
     await calendar.loadFromStorage();
 
-    // ✅ 기존 5초 대기 후 홈 이동
+    // 4) 로그인 되어 있을 때만 위시리스트 / 구매향수 로드
+    if (user != null) {
+      await context.read<WishlistProvider>().fetchWishlist();
+      await context.read<PurchasedProvider>().fetchPurchased();
+    }
+
+    // 5) 로딩 딜레이 후 홈 이동
     Timer(const Duration(seconds: 5), () {
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (context) => const HomeScreen()),
+        MaterialPageRoute(builder: (_) => const HomeScreen()),
       );
     });
   }
