@@ -1,11 +1,16 @@
-// lib/screens/home_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
+import 'package:provider/provider.dart';
+
+import '../providers/today_recommendation_provider.dart';
+import '../providers/auth_provider.dart';
 import '../widgets/topbar/appbar_ver1.dart';
 import '../widgets/bottom_navbar.dart';
 import '../widgets/custom_drawer.dart';
+import '../widgets/home/home_section_title.dart';
 import '../screens/perfume_detail_screen.dart';
 import 'package:sw_showcase/screens/accord_perfumes_screen.dart';
+import '../models/today_recommendation.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -17,29 +22,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
 
-  // ------------------------ 더미 데이터 ------------------------
-  final List<Map<String, String>> monthlyPerfumes = [
-    {
-      'id': '11111111',
-      'brand': '딥디크',
-      'name': '오에도 오 드 뚜왈렛',
-      'image': 'assets/images/perfume001.png',
-    },
-    {
-      'id': '22222222',
-      'brand': '돌체앤가바나',
-      'name': '라이트 블루',
-      'image': 'assets/images/perfume002.png',
-    },
-    {
-      'id': '33333333',
-      'brand': '조말론 런던',
-      'name': '라임 바질 앤 만다린',
-      'image': 'assets/images/perfume003.png',
-    }
-  ];
-
-  // Key를 영어로 -> 계열별 추천에서 api 요청의 계열이 영어로 전달되게 함
+  // ------------------------ 계열별 추천 ------------------------
   final List<Map<String, String>> categories = [
     {'name': '플로럴', 'image': 'assets/images/category01.png', 'key': 'floral'},
     {'name': '프루티', 'image': 'assets/images/category02.png', 'key': 'fruity'},
@@ -53,6 +36,7 @@ class _HomeScreenState extends State<HomeScreen> {
     {'name': '레더', 'image': 'assets/images/category10.png', 'key': 'leather'},
   ];
 
+  // ------------------------ 더미 BTI 추천(로그인 시만 표시) ------------------------
   final List<Map<String, String>> myBTI = [
     {
       'id': 'bti001',
@@ -96,9 +80,24 @@ class _HomeScreenState extends State<HomeScreen> {
   ];
 
   // ------------------------------------------------------------
+  // initState → 오늘의 추천 향수 최초 로딩
+  // ------------------------------------------------------------
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<TodayRecommendationProvider>().fetchTodayRecommendations();
+    });
+  }
 
+  // ------------------------------------------------------------
+  // 빌드
+  // ------------------------------------------------------------
   @override
   Widget build(BuildContext context) {
+    final isLoggedIn = context.watch<AuthProvider>().isLoggedIn;
+    final todayProvider = context.watch<TodayRecommendationProvider>();
+
     return Scaffold(
       appBar: const AppBarVer1(),
       endDrawer: const CustomDrawer(),
@@ -108,73 +107,52 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ---------------------------------------
-              // ① 이달의 향수
-              // ---------------------------------------
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 10),
-                child: Text(
-                  '이달의 향수',
-                  style: TextStyle(
-                    fontSize: 30,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ),
+              const SizedBox(height: 16),
+              // =======================================================
+              // ① 오늘의 맞춤 향수 (이달의 향수 대신!)
+              // =======================================================
+              const HomeSectionTitle(title: "오늘의 맞춤 향수"),
+
+              const SizedBox(height: 8),
+
+              _buildOccasionChips(todayProvider),
+
               const SizedBox(height: 12),
 
               SizedBox(
-                height: 348,
-                child: ScrollConfiguration(
-                  behavior: const MaterialScrollBehavior().copyWith(
-                    dragDevices: {
-                      PointerDeviceKind.touch,
-                      PointerDeviceKind.mouse,
-                      PointerDeviceKind.trackpad,
-                    },
-                  ),
-                  child: ListView.builder(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: monthlyPerfumes.length,
-                    itemBuilder: (context, index) {
-                      final p = monthlyPerfumes[index];
-                      return GestureDetector(
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => PerfumeDetailScreen(
-                                perfumeId: p['id']!,
-                                fromStorage: false,
-                              ),
+                height: 220,
+                child: todayProvider.isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : todayProvider.items.isEmpty
+                    ? const Center(
+                  child: Text("오늘의 추천 향수를 불러오지 못했어요."),
+                )
+                    : ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: todayProvider.items.length,
+                  itemBuilder: (context, index) {
+                    final item = todayProvider.items[index];
+                    return GestureDetector(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => PerfumeDetailScreen(
+                              perfumeId: item.id,
+                              fromStorage: false,
                             ),
-                          );
-                        },
-                        child: Align(
-                          alignment: Alignment.center,
-                          child: _buildMonthlyCard(p),
-                        ),
-                      );
-                    },
-                  ),
+                          ),
+                        );
+                      },
+                      child: _buildTodayCard(item),
+                    );
+                  },
                 ),
               ),
-
-              const SizedBox(height: 24),
-
-              // ---------------------------------------
+              // =======================================================
               // ② 계열별 추천
-              // ---------------------------------------
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 10),
-                child: Text(
-                  '계열별 추천',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ),
+              // =======================================================
+              const HomeSectionTitle(title: "계열별 추천"),
               const SizedBox(height: 12),
 
               GridView.builder(
@@ -193,8 +171,9 @@ class _HomeScreenState extends State<HomeScreen> {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) =>
-                              AccordPerfumesScreen(accordName: categories[index]['key']!),
+                          builder: (_) => AccordPerfumesScreen(
+                            accordName: categories[index]['key']!,
+                          ),
                         ),
                       );
                     },
@@ -210,77 +189,77 @@ class _HomeScreenState extends State<HomeScreen> {
                             fit: BoxFit.cover,
                           ),
                         ),
-                        Text(cat['name']!, style: const TextStyle(fontSize: 11)),
+                        Text(cat['name']!,
+                            style: const TextStyle(fontSize: 11)),
                       ],
                     ),
                   );
                 },
               ),
+              // =======================================================
+              // ③ 나의 향 BTI 추천 (로그인 시에만 표시)
+              // =======================================================
+              if (isLoggedIn) ...[
+                const SizedBox(height: 24),
+                const _SectionTitle(
+                    'Warm·Heavy한 당신에게는 오리엔탈 & 우디 계열이 잘 어울려요'),
 
-              const SizedBox(height: 24),
-
-              // ---------------------------------------
-              // ③ 나의 향BTI 추천
-              // ---------------------------------------
-              const _SectionTitle(
-                  'Warm·Heavy한 당신에게는 오리엔탈 & 우디 계열이 잘 어울려요'),
-
-              SizedBox(
-                height: 180,
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: myBTI.length,
-                  itemBuilder: (context, index) {
-                    final p = myBTI[index];
-                    return GestureDetector(
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => PerfumeDetailScreen(
-                              perfumeId: p['id']!,
-                              fromStorage: false,
+                SizedBox(
+                  height: 180,
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: myBTI.length,
+                    itemBuilder: (context, index) {
+                      final p = myBTI[index];
+                      return GestureDetector(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => PerfumeDetailScreen(
+                                perfumeId: p['id']!,
+                                fromStorage: false,
+                              ),
                             ),
-                          ),
-                        );
-                      },
-                      child: _buildPerfumeCard(p),
-                    );
-                  },
+                          );
+                        },
+                        child: _buildPerfumeCard(p),
+                      );
+                    },
+                  ),
                 ),
-              ),
 
-              const SizedBox(height: 24),
+                // =======================================================
+                // ④ 반대 성향 추천
+                // =======================================================
+                const SizedBox(height: 24),
+                const _SectionTitle('시트러스 & 플로럴 계열도 시도해 보세요'),
 
-              // ---------------------------------------
-              // ④ 반대 성향 추천
-              // ---------------------------------------
-              const _SectionTitle('시트러스 & 플로럴 계열도 시도해 보세요'),
-
-              SizedBox(
-                height: 180,
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: oppositeBTI.length,
-                  itemBuilder: (context, index) {
-                    final p = oppositeBTI[index];
-                    return GestureDetector(
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => PerfumeDetailScreen(
-                              perfumeId: p['id']!,
-                              fromStorage: false,
+                SizedBox(
+                  height: 180,
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: oppositeBTI.length,
+                    itemBuilder: (context, index) {
+                      final p = oppositeBTI[index];
+                      return GestureDetector(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => PerfumeDetailScreen(
+                                perfumeId: p['id']!,
+                                fromStorage: false,
+                              ),
                             ),
-                          ),
-                        );
-                      },
-                      child: _buildPerfumeCard(p),
-                    );
-                  },
+                          );
+                        },
+                        child: _buildPerfumeCard(p),
+                      );
+                    },
+                  ),
                 ),
-              ),
+              ],
             ],
           ),
         ),
@@ -293,60 +272,102 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // -------------------------------------------------------
-  // 카드 UI 위젯들
-  // -------------------------------------------------------
-  Widget _buildMonthlyCard(Map<String, String> p) {
+  // =======================================================
+  // 오늘의 맞춤 향수 카드 (네트워크 이미지)
+  // =======================================================
+  Widget _buildTodayCard(TodayRecommendationItem item) {
     return Container(
-      width: 220,
-      height: 330,
-      margin: const EdgeInsets.only(right: 20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.2),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
+      width: 150,
+      margin: const EdgeInsets.only(right: 10),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
         children: [
+          const SizedBox(height: 16),
           ClipRRect(
             borderRadius: BorderRadius.circular(12),
-            child: Image.asset(
-              p['image']!,
-              height: 210,
-              width: 140,
-              fit: BoxFit.fill,
+            child: Image.network(
+              item.imageUrl,
+              height: 120,
+              width: 100,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) {
+                return Image.asset(
+                  'assets/images/dummy.jpg',
+                  height: 120,
+                  width: 100,
+                  fit: BoxFit.cover,
+                );
+              },
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 8),
+          Text(item.brandName,
+              style: const TextStyle(color: Colors.grey, fontSize: 10)),
           Text(
-            p['brand'] ?? '',
-            style: const TextStyle(color: Colors.grey, fontSize: 10),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            p['name']!,
-            style: const TextStyle(fontWeight: FontWeight.w600),
+            item.name,
+            style: const TextStyle(
+                fontSize: 11, fontWeight: FontWeight.w600),
+            maxLines: 2,
+            textAlign: TextAlign.center,
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),
     );
   }
 
+  // =======================================================
+  // Occasion 선택 버튼
+  // =======================================================
+  Widget _buildOccasionChips(TodayRecommendationProvider provider) {
+    final options = [
+      {'key': 'nightout', 'label': '나이트 아웃'},
+      {'key': 'casual', 'label': '캐주얼'},
+      {'key': 'professional', 'label': '포멀'},
+    ];
+
+    return Row(
+      children: options.map((opt) {
+        final bool selected = provider.occasion == opt['key'];
+
+        return Padding(
+          padding: const EdgeInsets.only(right: 8),
+          child: GestureDetector(
+            onTap: () => provider.setOccasion(opt['key']!),
+            child: Container(
+              padding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                color: selected ? Colors.black : Colors.white,
+                border: Border.all(
+                  color: selected
+                      ? Colors.black
+                      : Colors.grey.shade400,
+                ),
+              ),
+              child: Text(
+                opt['label']!,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: selected ? Colors.white : Colors.black,
+                ),
+              ),
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  // =======================================================
+  // 기존 Perfume 카드 위젯 (BTI 추천용)
+  // =======================================================
   Widget _buildPerfumeCard(Map<String, String> perfume) {
     return Container(
       width: 150,
       margin: const EdgeInsets.only(right: 8),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.start,
         children: [
-          const SizedBox(height: 8),
           ClipRRect(
             child: Image.asset(
               perfume['image']!,
@@ -357,23 +378,15 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            perfume['brand'] ?? '',
+            perfume['brand']!,
             style: const TextStyle(color: Colors.grey, fontSize: 10),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
           ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: Text(
-              perfume['name'] ?? '',
-              style:
-              const TextStyle(fontWeight: FontWeight.w600, fontSize: 11),
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
+          Text(
+            perfume['name']!,
+            style: const TextStyle(
+                fontWeight: FontWeight.w600, fontSize: 11),
+            textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 8),
         ],
       ),
     );
