@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../services/api_client.dart';
 import 'auth_provider.dart';
 import '../models/pbti_result.dart';
+import '../models/pbti_recommendation.dart';
 
 class PbtiProvider with ChangeNotifier {
   /// 서버에서 가져온 PBTI 코드 리스트 (최신순)
@@ -86,4 +87,25 @@ class PbtiProvider with ChangeNotifier {
     _results = [];
     notifyListeners();
   }
+
+  // 추천 api
+  Future<List<PbtiRecommendationItem>> fetchRecommendations() async {
+    final res = await ApiClient.I.get(
+      "/pbti/recommendations",
+      auth: true, // 서버가 로그인한 user_id 기반으로 처리
+    );
+
+    if (res.statusCode != 200) {
+      throw Exception("추천 향수 불러오기 실패");
+    }
+
+    final Map<String, dynamic> data = jsonDecode(res.body);
+
+    List<dynamic> items = data['items'] ?? [];
+
+    return items
+        .map((e) => PbtiRecommendationItem.fromJson(e))
+        .toList();
+  }
+
 }
