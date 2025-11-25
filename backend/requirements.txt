@@ -1,6 +1,4 @@
-# =========================================================
-# Core Framework & Server
-# =========================================================
+
 fastapi==0.116.1
 uvicorn==0.35.0
 starlette==0.47.3
@@ -12,31 +10,19 @@ httptools==0.6.4
 websockets==15.0.1
 watchfiles==1.1.0
 
-# =========================================================
-# Database & Migration
-# =========================================================
 SQLAlchemy==2.0.43
 alembic==1.16.5
 Mako==1.3.10
 psycopg2-binary==2.9.10
 greenlet==3.2.4
 
-# =========================================================
-# Security & Authentication
-# =========================================================
 PyJWT==2.9.0
 bcrypt==4.1.2
 passlib[bcrypt]==1.7.4
 
-# =========================================================
-# Environment & Config
-# =========================================================
 python-dotenv==1.1.1
 PyYAML==6.0.2
 
-# =========================================================
-# Data Validation & Utilities
-# =========================================================
 pydantic==2.11.7
 pydantic-settings==2.10.1
 pydantic_core==2.33.2
@@ -45,17 +31,11 @@ typing_extensions==4.15.0
 python-multipart==0.0.20
 rapidfuzz==3.14.3
 
-# =========================================================
-# Networking
-# =========================================================
 certifi==2025.8.3
 idna==3.10
 httpx==0.28.1
 pymysql==1.1.2
 
-# =========================================================
-# Vision / ML (CPU ONLY)
-# =========================================================
 --extra-index-url https://download.pytorch.org/whl/cpu
 torch==2.9.1+cpu
 torchvision==0.24.1+cpu
@@ -66,9 +46,7 @@ pillow==12.0.0
 shapely==2.1.2
 pytesseract==0.3.13
 
-# ultralytics (기본 버전)
 ultralytics==8.3.229
 
-# opencv headless 강제 고정 (ultralytics가 opencv-python 설치해도 이를 덮어씀)
 opencv-python-headless==4.12.0.88
 email-validator==2.2.0
