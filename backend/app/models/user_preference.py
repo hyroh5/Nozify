@@ -7,6 +7,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.mysql import JSON
 from .base import Base, TimestampMixin
 
+
 class UserPreference(Base, TimestampMixin):
     __tablename__ = "user_preference"
 

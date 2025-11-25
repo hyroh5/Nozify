@@ -86,3 +86,15 @@ def adjust_weights_by_temp(base_season: str, temp: float) -> dict:
             weights["adj1"] += 0.1  # winter 인접 계절 비중 증가
 
     return weights
+
+
+def detect_season_from_temp(temp: float) -> str:
+    """기온 기반 간단 계절 판정"""
+    if temp >= 25:
+        return "summer"
+    elif temp <= 10:
+        return "winter"
+    elif temp < 18:
+        return "fall"
+    else:
+        return "spring"
