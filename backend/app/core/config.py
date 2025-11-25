@@ -35,11 +35,15 @@ class Settings(BaseSettings):
     # Fragella API 연동용 키
     FRAGELLA_API_KEY: Optional[str] = None
 
+    # ★ 추가: OpenWeather API Key
+    OPENWEATHER_API_KEY: Optional[str] = None
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
-        extra="ignore",  # 알 수 없는 env 키 무시
+        extra="ignore",
     )
+
 
 
 class VisionConfig:

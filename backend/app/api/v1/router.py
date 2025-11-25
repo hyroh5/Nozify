@@ -11,6 +11,8 @@ from app.api.routes.catalog.filters import router as filters_router
 from app.api.routes import auth as auth_router
 from app.api.routes.pbti import router as pbti_router
 from app.api.routes.user.purchase_history import router as purchase_history_router
+from app.api.routes.catalog.perfumes import router as perfumes_router
+from app.api.routes.catalog.seasonal import router as seasonal_router
 
 
 api_v1 = APIRouter()
@@ -33,3 +35,6 @@ api_v1.include_router(auth_router.router)
 
 # PBTI
 api_v1.include_router(pbti_router, tags=["PBTI"])
+
+api_v1.include_router(perfumes_router, tags=["Catalog"])
+api_v1.include_router(seasonal_router, tags=["Seasonal"])

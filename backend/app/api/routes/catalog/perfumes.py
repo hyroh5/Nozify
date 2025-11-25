@@ -49,21 +49,18 @@ def get_perfume(
     rid = uuid4().hex[:8]
     print(f"[VIEW][{rid}] track_view={track_view} id={perfume_id}")
 
-    # User 객체에서 user_id bytes를 안전하게 추출
     user_id_bytes = None
     if current_user is not None:
-        if hasattr(current_user, 'id'):
+        if hasattr(current_user, "id"):
             user_id_bytes = current_user.id
         elif isinstance(current_user, bytes):
             user_id_bytes = current_user
-        
-    # 1) hex UUID 시도
+
     pk = try_uuid_hex_to_bytes(perfume_id)
     p = None
     if pk:
         p = db.get(Perfume, pk)
 
-    # 2) 실패하면 fragella_id로도 조회 시도
     if p is None:
         p = db.query(Perfume).filter(Perfume.fragella_id == perfume_id).first()
 
@@ -71,13 +68,11 @@ def get_perfume(
         if pk is None and "-" not in perfume_id and len(perfume_id) not in (16, 32):
             raise HTTPException(status_code=400, detail="invalid id format: hex uuid 또는 fragella_id 사용")
         raise HTTPException(status_code=404, detail="perfume not found")
-        
+
     if track_view:
         p.view_count = int(p.view_count or 0) + 1
-        
-        # 최근 본 항목 기록(유저 있을 때만) - UPSERT 로직
+
         if user_id_bytes:
-            # 1. 기존 레코드가 있는지 확인 (User ID와 Perfume ID 기준)
             existing_view = (
                 db.query(RecentView)
                 .filter(RecentView.user_id == user_id_bytes, RecentView.perfume_id == p.id)
@@ -85,13 +80,10 @@ def get_perfume(
             )
 
             if existing_view:
-                # 2. 레코드가 있으면 viewed_at만 업데이트 (UPDATE)
                 existing_view.viewed_at = datetime.now()
             else:
-                # 3. 레코드가 없으면 새로 추가 (INSERT)
                 db.add(RecentView(user_id=user_id_bytes, perfume_id=p.id))
 
-        # View Count와 Recent View 변경사항을 동시에 커밋
         db.commit()
         db.refresh(p)
 
@@ -102,13 +94,16 @@ def list_perfumes(
     brand_id: str | None = Query(None, description="hex 형식 UUID"),
     gender: str | None = Query(None, description="men / women / unisex"),
     q: str | None = Query(None, min_length=2, description="이름/브랜드 검색"),
+    accords: str | None = Query(None, description="콤마구분 예: sweet,woody,citrus"),
+    notes: str | None = Query(None, description="콤마구분 예: Bergamot,Jasmine"),
     sort: str | None = Query(None, description="popular|recent"),
     limit: int = Query(30, ge=1, le=100),
     offset: int = Query(0, ge=0),
-    current_user: User | None = Depends(get_current_user_id), # 비로그인 사용자도 호출 가능
+    current_user: User | None = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ):
     query = db.query(Perfume)
+
     if brand_id:
         query = query.filter(Perfume.brand_id == uuid_hex_to_bytes(brand_id))
     if gender:
@@ -117,7 +112,23 @@ def list_perfumes(
         like = f"%{q}%"
         query = query.filter(or_(Perfume.name.ilike(like), Perfume.brand_name.ilike(like)))
 
-    # 정렬
+    # 어코드 필터
+    if accords:
+        for acc in [a.strip() for a in accords.split(",") if a.strip()]:
+            query = query.filter(func.json_contains(Perfume.main_accords, f'["{acc}"]'))
+
+    # 노트 필터
+    if notes:
+        for nt in [n.strip() for n in notes.split(",") if n.strip()]:
+            query = query.filter(
+                or_(
+                    func.json_search(Perfume.top_notes, "one", nt) != None,
+                    func.json_search(Perfume.middle_notes, "one", nt) != None,
+                    func.json_search(Perfume.base_notes, "one", nt) != None,
+                    func.json_search(Perfume.general_notes, "one", nt) != None,
+                )
+            )
+
     if sort == "popular":
         query = query.order_by(Perfume.view_count.desc(), Perfume.wish_count.desc(), Perfume.id.desc())
     else:
@@ -136,6 +147,7 @@ def list_perfumes(
         }
         for p in items
     ]
+
 
 # ─────────────────────────────────────────
 # 유사 향수 추천 (간단한 교집합 기반)

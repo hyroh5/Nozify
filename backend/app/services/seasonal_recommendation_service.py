@@ -6,7 +6,6 @@ from sqlalchemy.orm import Session
 from app.models.perfume import Perfume
 from app.models.brand import Brand
 
-
 SEASONS = ["spring", "summer", "fall", "winter"]
 
 ADJACENT_MAP: Dict[str, Tuple[str, str]] = {
@@ -52,21 +51,21 @@ def calc_stability(scores: Dict[str, float]) -> float:
     return float(round(1.0 / std, 3))
 
 
-def calc_final_score(
-    season: str,
-    scores: Dict[str, float],
-    mode: str
-) -> Tuple[float, float, float, float]:
+def calc_final_score(season: str, scores: Dict[str, float], weights: Dict[str, float]):
     adj1, adj2 = ADJACENT_MAP[season]
-    w = DEFAULT_WEIGHTS.get(mode, DEFAULT_WEIGHTS["transition"])
 
     current = scores[season]
     a1 = scores[adj1]
     a2 = scores[adj2]
     stability = calc_stability(scores)
 
-    base = current * w["current"] + a1 * w["adj1"] + a2 * w["adj2"]
-    final_score = base * 0.7 + stability * w["stability"]
+    base = (
+        current * weights["current"]
+        + a1 * weights["adj1"]
+        + a2 * weights["adj2"]
+    )
+
+    final_score = base * 0.7 + stability * weights["stability"]
 
     return current, base, stability, float(round(final_score, 3))
 
@@ -75,6 +74,7 @@ def make_comment(season: str, scores: Dict[str, float], stability: float) -> str
     ranked = sorted(SEASONS, key=lambda s: scores[s], reverse=True)
     top = ranked[0]
     second = ranked[1]
+
     if top == season:
         return "지금 계절 점수가 가장 높아 제철에 잘 맞는 향입니다"
     adj1, _ = ADJACENT_MAP[season]
@@ -91,8 +91,15 @@ def get_seasonal_perfumes(
     mode: str,
     limit: int,
     offset: int,
-    include_comment: bool = True
+    include_comment: bool = True,
+    weights_override: Dict[str, float] | None = None
 ) -> List[Dict[str, Any]]:
+
+    # mode 기반 기본 가중치 불러오고, override가 있으면 덮어쓰기
+    weights = DEFAULT_WEIGHTS.get(mode, DEFAULT_WEIGHTS["transition"]).copy()
+    if weights_override:
+        weights.update(weights_override)
+
     rows = (
         db.query(
             Perfume.id,
@@ -111,7 +118,7 @@ def get_seasonal_perfumes(
     scored: List[Dict[str, Any]] = []
     for r in rows:
         scores = season_score_map(r.season_ranking)
-        current, base, stability, final_score = calc_final_score(season, scores, mode)
+        current, base, stability, final_score = calc_final_score(season, scores, weights)
         comment = make_comment(season, scores, stability) if include_comment else None
 
         scored.append({

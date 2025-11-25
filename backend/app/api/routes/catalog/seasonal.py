@@ -12,8 +12,12 @@ from app.schemas.seasonal import (
     WeatherSummary,
 )
 
-from app.services.seasonal_recommendation_service import get_seasonal_perfumes, DEFAULT_WEIGHTS
-from app.services.weather_service import fetch_weather, detect_season_from_temp
+from app.services.seasonal_recommendation_service import get_seasonal_perfumes
+from app.services.weather_service import (
+    fetch_weather,
+    detect_season_from_date,
+    adjust_weights_by_temp
+)
 
 router = APIRouter(prefix="/catalog/seasonal", tags=["Seasonal"])
 
@@ -32,10 +36,14 @@ def seasonal_perfumes(
     if mode not in ["now", "transition", "stable"]:
         raise HTTPException(status_code=400, detail="invalid mode")
 
-    items_raw = get_seasonal_perfumes(db, season, mode, limit, offset, include_comment)
+    items_raw = get_seasonal_perfumes(
+        db, season, mode, limit, offset, include_comment
+    )
     items = [SeasonalPerfumeItem(**x) for x in items_raw]
 
-    return SeasonalPerfumeResponse(season=season, mode=mode, items=items)
+    return SeasonalPerfumeResponse(
+        season=season, mode=mode, items=items
+    )
 
 
 @router.post("/perfumes/weather", response_model=WeatherSeasonalResponse)
@@ -50,20 +58,32 @@ async def weather_seasonal_perfumes(
     humidity = int(weather["main"]["humidity"])
     condition = weather["weather"][0]["main"]
 
-    season_detected = detect_season_from_temp(temp)
-    mode = "transition"
+    # 날짜 기반 season 먼저 결정
+    base_season = detect_season_from_date(body.lat, weather["dt"])
 
-    items_raw = get_seasonal_perfumes(db, season_detected, mode, body.limit, body.offset, body.include_comment)
+    # temp 기반 weights 보정
+    weights = adjust_weights_by_temp(base_season, temp)
+
+    items_raw = get_seasonal_perfumes(
+        db=db,
+        season=base_season,
+        mode="transition",
+        limit=body.limit,
+        offset=body.offset,
+        include_comment=body.include_comment,
+        weights_override=weights
+    )
+
     items = [SeasonalPerfumeItem(**x) for x in items_raw]
 
     return WeatherSeasonalResponse(
-        season_detected=season_detected,
+        season_detected=base_season,
         weather_summary=WeatherSummary(
             temp=temp,
             feels_like=feels_like,
             humidity=humidity,
             condition=condition,
         ),
-        weights=DEFAULT_WEIGHTS[mode],
+        weights=weights,
         items=items,
     )
