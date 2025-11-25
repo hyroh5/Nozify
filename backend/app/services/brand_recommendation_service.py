@@ -26,13 +26,13 @@ def get_user_top_brands(
         db.query(
             Perfume.brand_id.label("brand_id"),
             Brand.name.label("brand_name"),
-            Brand.image_url.label("brand_image_url"),
+            Brand.logo_url.label("brand_image_url"),
             func.count(RecentView.id).label("view_count"),
         )
         .join(Perfume, RecentView.perfume_id == Perfume.id)
         .join(Brand, Perfume.brand_id == Brand.id)
         .filter(RecentView.user_id == user_id_bytes)
-        .group_by(Perfume.brand_id, Brand.name, Brand.image_url)
+        .group_by(Perfume.brand_id, Brand.name, Brand.logo_url)
         .order_by(desc("view_count"))
         .limit(limit)
         .all()
