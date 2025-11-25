@@ -41,6 +41,7 @@ dependencies:
   path_provider: ^2.1.5
   carousel_slider: ^5.1.1
   http: ^1.6.0
+  location: ^8.0.1
 
 dev_dependencies:
   flutter_test:
