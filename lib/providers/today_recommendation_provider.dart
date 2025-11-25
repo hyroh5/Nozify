@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:location/location.dart';
 
 import '../services/api_client.dart';
-import '../models/today_recommendation.dart';
+import '../models/perfume_simple.dart';
 
 class TodayRecommendationProvider with ChangeNotifier {
   final Location _location = Location();
@@ -15,8 +15,8 @@ class TodayRecommendationProvider with ChangeNotifier {
   bool _isLoading = false;
   bool get isLoading => _isLoading;
 
-  List<TodayRecommendationItem> _items = [];
-  List<TodayRecommendationItem> get items => _items;
+  List<PerfumeSimple> _items = [];
+  List<PerfumeSimple> get items => _items;
 
   // occasion 변경 + 재조회
   Future<void> setOccasion(String value) async {
@@ -72,7 +72,7 @@ class TodayRecommendationProvider with ChangeNotifier {
         final List<dynamic> list = jsonMap['items'] as List<dynamic>;
         _items = list
             .map((e) =>
-            TodayRecommendationItem.fromJson(e as Map<String, dynamic>))
+            PerfumeSimple.fromJson(e as Map<String, dynamic>))
             .toList();
       }
     } catch (_) {

@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:carousel_slider/carousel_slider.dart';
+import 'package:sw_showcase/models/perfume_simple.dart';
 
 import '../../providers/auth_provider.dart';
 import '../../providers/pbti_provider.dart';
@@ -28,7 +29,7 @@ class _PbtiMainScreenState extends State<PbtiMainScreen> {
   List<String> pbtiResults = [];
 
   /// 추천 향수 리스트
-  List<PbtiRecommendationItem> recommendations = [];
+  List<PerfumeSimple> recommendations = [];
 
   bool isLoadingRecommendations = true;
 
@@ -291,14 +292,14 @@ class _PbtiMainScreenState extends State<PbtiMainScreen> {
   /// ------------------------
   /// 향수 카드 위젯
   /// ------------------------
-  Widget _buildPerfumeCard(PbtiRecommendationItem item) {
+  Widget _buildPerfumeCard(PerfumeSimple item) {
     return GestureDetector(
       onTap: () {
         Navigator.push(
           context,
           MaterialPageRoute(
             builder: (_) => PerfumeDetailScreen(
-              perfumeId: item.perfumeId,
+              perfumeId: item.id,
               fromStorage: false,
             ),
           ),
@@ -313,25 +314,20 @@ class _PbtiMainScreenState extends State<PbtiMainScreen> {
             const SizedBox(height: 8),
             ClipRRect(
               borderRadius: BorderRadius.circular(12),
-              child: item.imageUrl != null && item.imageUrl!.isNotEmpty
-                  ? Image.network(
-                item.imageUrl!,
-                height: 108,
-                width: 90,
-                fit: BoxFit.cover,
-              )
-                  : Image.asset(
-                'assets/images/dummy.jpg',
+              child: Image.network(
+                item.imageUrl ?? "",
                 height: 108,
                 width: 90,
                 fit: BoxFit.cover,
                 errorBuilder: (_, __, ___) {
                   return Image.asset(
                     'assets/images/dummy.jpg',
-                    fit: BoxFit.fitHeight,
+                    height: 108,
+                    width: 190,
+                    fit: BoxFit.cover,
                   );
                 },
-              ),
+              )
             ),
             const SizedBox(height: 8),
             Text(

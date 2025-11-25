@@ -1,10 +1,13 @@
+// lib/providers/pbti_provider.dart
 import 'dart:convert';
 import 'package:flutter/material.dart';
 
 import '../services/api_client.dart';
 import 'auth_provider.dart';
+
 import '../models/pbti_result.dart';
-import '../models/pbti_recommendation.dart';
+import '../models/perfume_simple.dart';
+import '../models/pbti_axis_recommendation.dart';   // 🔥 축별 추천 전체 모델
 
 class PbtiProvider with ChangeNotifier {
   /// 서버에서 가져온 PBTI 코드 리스트 (최신순)
@@ -48,8 +51,7 @@ class PbtiProvider with ChangeNotifier {
     }
   }
 
-  /// 설문 답안을 서버에 제출
-  /// answers: [{ "question_id": 1, "choice": 5 }, ...]
+  /// 설문 제출
   Future<PbtiResultModel> submitPbti(
       AuthProvider auth,
       List<Map<String, int>> answers,
@@ -58,9 +60,7 @@ class PbtiProvider with ChangeNotifier {
       throw Exception("로그인 후 이용 가능합니다.");
     }
 
-    final body = jsonEncode({
-      "answers": answers,
-    });
+    final body = jsonEncode({"answers": answers});
 
     final res = await ApiClient.I.post(
       "/pbti/submit",
@@ -74,25 +74,24 @@ class PbtiProvider with ChangeNotifier {
 
     final Map<String, dynamic> json = jsonDecode(res.body);
 
-    /// 🔥 여기서 항상 안전하게 파싱됨 (오류 안 남)
     final result = PbtiResultModel.fromJson(json);
 
-    /// 히스토리 새로고침
     await loadResults(auth);
 
     return result;
   }
 
+  /// 로그아웃 시 초기화
   void clear() {
     _results = [];
     notifyListeners();
   }
 
-  // 추천 api
-  Future<List<PbtiRecommendationItem>> fetchRecommendations() async {
+  /// 🔥 기존 추천 API (그냥 리스트)
+  Future<List<PerfumeSimple>> fetchRecommendations() async {
     final res = await ApiClient.I.get(
       "/pbti/recommendations",
-      auth: true, // 서버가 로그인한 user_id 기반으로 처리
+      auth: true,
     );
 
     if (res.statusCode != 200) {
@@ -100,12 +99,27 @@ class PbtiProvider with ChangeNotifier {
     }
 
     final Map<String, dynamic> data = jsonDecode(res.body);
-
     List<dynamic> items = data['items'] ?? [];
 
     return items
-        .map((e) => PbtiRecommendationItem.fromJson(e))
+        .map((e) => PerfumeSimple.fromJson(e))
         .toList();
   }
 
+  /// 🔥 PBti 축별 추천 API
+  Future<PbtiByTypeRecommendation> fetchByTypeRecommendations() async {
+    final res = await ApiClient.I.get(
+      "/pbti/recommendations/by_type",
+      auth: true,
+    );
+
+    if (res.statusCode != 200) {
+      throw Exception("축별 추천 불러오기 실패 (status: ${res.statusCode})");
+    }
+
+    final Map<String, dynamic> data = jsonDecode(res.body);
+
+    /// 🔥 축 전체 모델로 파싱해야 정상!
+    return PbtiByTypeRecommendation.fromJson(data);
+  }
 }
