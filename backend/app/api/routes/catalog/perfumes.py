@@ -5,10 +5,11 @@ from app.core.db import get_db
 from app.models.perfume import Perfume
 from app.models.base import uuid_bytes_to_hex, uuid_hex_to_bytes, try_uuid_hex_to_bytes
 from app.models.recent_view import RecentView
-from app.api.deps import get_current_user_id
+from app.api.deps import get_current_user_id, get_current_user_optional
 from uuid import uuid4, UUID
 from app.models.user import User
 from datetime import datetime
+
 
 router = APIRouter(prefix="/catalog", tags=["Catalog"])
 
@@ -44,7 +45,7 @@ def get_perfume(
     perfume_id: str = Path(..., description="hex UUID 또는 fragella_id"),
     track_view: bool = Query(True, description="상세 조회 시 view_count 증가"),
     db: Session = Depends(get_db),
-    current_user: User | None = Depends(get_current_user_id),
+    current_user: User | None = Depends(get_current_user_optional),
 ):
     rid = uuid4().hex[:8]
     print(f"[VIEW][{rid}] track_view={track_view} id={perfume_id}")
@@ -99,7 +100,7 @@ def list_perfumes(
     sort: str | None = Query(None, description="popular|recent"),
     limit: int = Query(30, ge=1, le=100),
     offset: int = Query(0, ge=0),
-    current_user: User | None = Depends(get_current_user_id),
+    current_user: User | None = Depends(get_current_user_optional),
     db: Session = Depends(get_db),
 ):
     query = db.query(Perfume)

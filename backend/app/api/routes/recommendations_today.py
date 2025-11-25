@@ -10,6 +10,13 @@ from app.models.user import User
 from app.models.perfume import Perfume
 from app.models.base import uuid_bytes_to_hex
 
+
+from datetime import datetime
+
+from app.models.recent_view import RecentView
+from app.schemas.recommendations import RecentViewedPerfume, RecentViewedList
+from app.models.user import User
+
 from app.services.weather_service import (
     fetch_weather,
     detect_season_from_date,
@@ -278,3 +285,67 @@ async def recommend_today(
         },
         "items": items,
     }
+
+
+
+
+
+
+
+
+
+
+
+
+
+@router.get(
+    "/recent-views",
+    response_model=RecentViewedList,
+    summary="최근 본 향수 목록 (최대 7개)",
+)
+def recent_viewed_perfumes(
+    limit: int = 7,
+    db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_current_user_id),
+):
+    """
+    로그인한 사용자의 최근 본 향수 목록을 반환한다.
+    - 최근 본 순서(viewed_at DESC)
+    - 최대 limit개 (기본 7개)
+    - 비로그인 사용자는 401
+    """
+    if current_user is None:
+        raise HTTPException(status_code=401, detail="로그인 필요")
+
+    # user_id bytes 추출
+    if hasattr(current_user, "id"):
+        user_id_bytes: bytes = current_user.id
+    elif isinstance(current_user, bytes):
+        user_id_bytes = current_user
+    else:
+        raise HTTPException(status_code=400, detail="invalid user object")
+
+    # RecentView 와 Perfume join 해서 정보 한 번에 로딩
+    rows = (
+        db.query(RecentView, Perfume)
+        .join(Perfume, RecentView.perfume_id == Perfume.id)
+        .filter(RecentView.user_id == user_id_bytes)
+        .order_by(RecentView.viewed_at.desc())
+        .limit(limit)
+        .all()
+    )
+
+    items: list[RecentViewedPerfume] = []
+    for rv, p in rows:
+        items.append(
+            RecentViewedPerfume(
+                perfume_id=uuid_bytes_to_hex(p.id),
+                name=p.name,
+                brand_name=p.brand_name,
+                image_url=p.image_url,
+                gender=p.gender,
+                viewed_at=rv.viewed_at,
+            )
+        )
+
+    return RecentViewedList(items=items)
