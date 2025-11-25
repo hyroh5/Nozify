@@ -200,7 +200,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   const SizedBox(height: 12),
 
                   SizedBox(
-                    height: 180,
+                    height: 196,
                     child: ListView.builder(
                       scrollDirection: Axis.horizontal,
                       itemCount: _byType!.forward.length,
@@ -216,7 +216,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   const SizedBox(height: 12),
 
                   SizedBox(
-                    height: 180,
+                    height: 196,
                     child: ListView.builder(
                       scrollDirection: Axis.horizontal,
                       itemCount: _byType!.reverse.length,
