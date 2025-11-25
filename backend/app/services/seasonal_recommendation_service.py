@@ -1,3 +1,4 @@
+import random
 from typing import Dict, List, Tuple, Any
 import math
 import uuid
@@ -91,15 +92,8 @@ def get_seasonal_perfumes(
     mode: str,
     limit: int,
     offset: int,
-    include_comment: bool = True,
-    weights_override: Dict[str, float] | None = None
+    include_comment: bool = True
 ) -> List[Dict[str, Any]]:
-
-    # mode 기반 기본 가중치 불러오고, override가 있으면 덮어쓰기
-    weights = DEFAULT_WEIGHTS.get(mode, DEFAULT_WEIGHTS["transition"]).copy()
-    if weights_override:
-        weights.update(weights_override)
-
     rows = (
         db.query(
             Perfume.id,
@@ -111,14 +105,14 @@ def get_seasonal_perfumes(
         )
         .join(Brand, Perfume.brand_id == Brand.id)
         .offset(offset)
-        .limit(limit * 5)
+        .limit(limit * 5)   # DB에서 일단 넉넉하게 가져오기
         .all()
     )
 
     scored: List[Dict[str, Any]] = []
     for r in rows:
         scores = season_score_map(r.season_ranking)
-        current, base, stability, final_score = calc_final_score(season, scores, weights)
+        current, base, stability, final_score = calc_final_score(season, scores, mode)
         comment = make_comment(season, scores, stability) if include_comment else None
 
         scored.append({
@@ -132,5 +126,17 @@ def get_seasonal_perfumes(
             "comment": comment,
         })
 
+    # 1차: 점수순 정렬
     scored.sort(key=lambda x: x["final_score"], reverse=True)
-    return scored[:limit]
+
+    # 2차: 상위 pool_size 개를 풀로 두고 그 안에서 랜덤 뽑기
+    pool_size = max(limit * 3, limit)   # 예: limit=10이면 상위 30개를 풀로
+    top_pool = scored[:pool_size]
+
+    if len(top_pool) <= limit:
+        # 후보가 limit 이하이면 그냥 다 반환
+        return top_pool
+
+    sampled = random.sample(top_pool, k=limit)
+
+    return sampled
