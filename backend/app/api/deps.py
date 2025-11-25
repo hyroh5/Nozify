@@ -9,25 +9,11 @@ from app.core.security import decode_access_token
 from app.models.user import User
 
 
-def get_current_user_id(
-    authorization: str | None = Header(default=None, alias="Authorization"),
-    db: Session = Depends(get_db),
-) -> User:
+def _decode_user_from_token(token: str, db: Session) -> User:
     """
-    로그인 필수 계에서 사용하는 계.
-    Authorization 헤더가 없거나, 토큰이 잘못되면 401 에러를 내고 종료.
+    내부 헬퍼: access token -> User
+    (get_current_user_id, get_current_user_optional 둘 다에서 공통 사용)
     """
-    if not authorization:
-        # 비로그인 상태 → 바로 401
-        raise HTTPException(status_code=401, detail="Authorization header missing")
-
-    if not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Invalid Authorization header")
-
-    token = authorization.split(" ", 1)[1].strip()
-    if not token:
-        raise HTTPException(status_code=401, detail="Empty access token")
-
     try:
         payload = decode_access_token(token)
     except Exception:
@@ -49,25 +35,51 @@ def get_current_user_id(
     return user
 
 
+def get_current_user_id(
+    authorization: str | None = Header(default=None, alias="Authorization"),
+    db: Session = Depends(get_db),
+) -> User:
+    """
+    로그인 필수 엔드포인트용.
+    - Authorization 헤더가 없거나
+    - 토큰이 잘못되면
+      → 401 에러를 바로 발생시킴.
+    """
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Authorization header missing")
+
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Invalid Authorization header")
+
+    token = authorization.split(" ", 1)[1].strip()
+    if not token:
+        raise HTTPException(status_code=401, detail="Empty token")
+
+    return _decode_user_from_token(token, db)
+
+
 def get_current_user_optional(
     authorization: str | None = Header(default=None, alias="Authorization"),
     db: Session = Depends(get_db),
 ) -> User | None:
     """
-    로그인 여부 선택 계에서 사용하는 계.
-    - Authorization 헤더가 없으면: None 반환 → 비로그인 상태로 취급
-    - 헤더는 있는데 토큰이 잘못되면: 401/403 은 None 으로 처리
+    비로그인 허용 엔드포인트용.
+    - Authorization 헤더가 없거나
+    - 토큰이 이상하면
+      → 에러 대신 그냥 None 리턴.
     """
-    # 완전 비로그인 요청
     if not authorization:
         return None
 
+    if not authorization.startswith("Bearer "):
+        return None
+
+    token = authorization.split(" ", 1)[1].strip()
+    if not token:
+        return None
+
     try:
-        # 위에서 정의한 엄격 버전을 재사용
-        return get_current_user_id(authorization=authorization, db=db)
-    except HTTPException as e:
-        # 인증 실패 계는 "그냥 비로그인 상태"로 간주
-        if e.status_code in (401, 403):
-            return None
-        # 다른 에러는 그대로 올림
-        raise
+        return _decode_user_from_token(token, db)
+    except HTTPException:
+        # 토큰이 깨졌거나 유저가 없으면 "로그인 안 한 것"으로 처리
+        return None

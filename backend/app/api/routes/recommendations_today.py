@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.core.db import get_db
 from app.core.config import settings
-from app.api.deps import get_current_user_id
+from app.api.deps import get_current_user_id, get_current_user_optional
 from app.models.user import User
 from app.models.perfume import Perfume
 from app.models.base import uuid_bytes_to_hex
@@ -179,7 +179,7 @@ async def recommend_today(
     lon: float = Query(..., description="사용자 경도"),
     limit: int = Query(12, ge=1, le=50),
     db: Session = Depends(get_db),
-    current_user: User | None = Depends(get_current_user_id),
+    current_user: User | None = Depends(get_current_user_optional),
 ):
     # 1. occasion 검증
     if occasion not in ("professional", "casual", "nightout"):
