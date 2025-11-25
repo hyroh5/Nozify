@@ -28,7 +28,7 @@ class _AccordPerfumesScreenState extends State<AccordPerfumesScreen> {
     Future.microtask(() {
       context
           .read<AccordProvider>()
-          .fetchPerfumesByAccord(widget.accordName, limit: 30);
+          .fetchPerfumesByAccord(widget.accordName, limit: 50);
     });
   }
 

@@ -1,4 +1,3 @@
-// lib/screens/perfume_detail_screen.dart
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
@@ -15,7 +14,7 @@ import '../providers/auth_provider.dart';
 import '../models/perfume_detail.dart';
 
 class PerfumeDetailScreen extends StatefulWidget {
-  final String perfumeId; // 서버의 perfume.id
+  final String perfumeId;
   final bool fromStorage;
 
   const PerfumeDetailScreen({
@@ -35,10 +34,9 @@ class _PerfumeDetailScreenState extends State<PerfumeDetailScreen> {
   bool _loading = true;
   String? _error;
 
-  bool _isFavorite = false;   // 위시 여부
-  bool _isPurchased = false;  // 구매 여부
+  bool _isFavorite = false;
+  bool _isPurchased = false;
 
-  // 색상 매핑
   final Map<String, Color> accordColors = {
     'sweet': Color(0xFFF8BBD0),
     'white floral': Color(0xFFF3E5F5),
@@ -68,9 +66,6 @@ class _PerfumeDetailScreenState extends State<PerfumeDetailScreen> {
     _loadData();
   }
 
-  // --------------------------
-  // 🔥 향수 상세 + 위시/구매 여부 로딩
-  // --------------------------
   Future<void> _loadData() async {
     setState(() {
       _loading = true;
@@ -78,13 +73,11 @@ class _PerfumeDetailScreenState extends State<PerfumeDetailScreen> {
     });
 
     final auth = context.read<AuthProvider>();
-    final bool useAuth = auth.isLoggedIn;
 
     try {
-      // 1) 상세 정보 로드
       final res = await ApiClient.I.get(
         "/catalog/perfumes/${widget.perfumeId}",
-        auth: useAuth,
+        auth: true,
       );
 
       if (res.statusCode != 200) {
@@ -97,9 +90,7 @@ class _PerfumeDetailScreenState extends State<PerfumeDetailScreen> {
       bool fav = false;
       bool purchased = false;
 
-      // 2) 로그인되어있으면 위시/구매도 체크
       if (auth.isLoggedIn) {
-        // ⭐ 위시리스트
         final wRes = await ApiClient.I.get("/user/wishlist", auth: true);
         if (wRes.statusCode == 200) {
           final list = jsonDecode(wRes.body) as List<dynamic>;
@@ -109,7 +100,6 @@ class _PerfumeDetailScreenState extends State<PerfumeDetailScreen> {
           });
         }
 
-        // ⭐ 구매내역
         final pRes = await ApiClient.I.get("/user/purchase-history", auth: true);
         if (pRes.statusCode == 200) {
           final list = jsonDecode(pRes.body) as List<dynamic>;
@@ -134,9 +124,6 @@ class _PerfumeDetailScreenState extends State<PerfumeDetailScreen> {
     }
   }
 
-  // --------------------------
-  // ❤️ 위시리스트 토글
-  // --------------------------
   Future<void> _toggleWishlist() async {
     final auth = context.read<AuthProvider>();
     if (!auth.isLoggedIn) {
@@ -150,7 +137,6 @@ class _PerfumeDetailScreenState extends State<PerfumeDetailScreen> {
 
     try {
       if (_isFavorite) {
-        // 🔥 삭제
         final res = await ApiClient.I.delete(
           "/user/wishlist/${_perfume!.id}",
           auth: true,
@@ -159,7 +145,6 @@ class _PerfumeDetailScreenState extends State<PerfumeDetailScreen> {
           setState(() => _isFavorite = false);
         }
       } else {
-        // 🔥 추가 (perfume_id는 query)
         final res = await ApiClient.I.post(
           "/user/wishlist?perfume_id=${_perfume!.id}",
           auth: true,
@@ -171,9 +156,6 @@ class _PerfumeDetailScreenState extends State<PerfumeDetailScreen> {
     } catch (_) {}
   }
 
-  // --------------------------
-  // 👜 구매 토글
-  // --------------------------
   Future<void> _togglePurchased() async {
     final auth = context.read<AuthProvider>();
     if (!auth.isLoggedIn) {
@@ -250,16 +232,12 @@ class _PerfumeDetailScreenState extends State<PerfumeDetailScreen> {
     );
   }
 
-  // --------------------------
-  // 🔥 실제 UI
-  // --------------------------
   Widget _buildDetail(PerfumeDetailModel perfume) {
     return SingleChildScrollView(
       child: Column(
         children: [
           const SizedBox(height: 12),
 
-          // 이미지
           Container(
             width: double.infinity,
             height: 264,
@@ -269,14 +247,22 @@ class _PerfumeDetailScreenState extends State<PerfumeDetailScreen> {
               perfume.imageUrl!,
               width: 264,
               height: 264,
-              fit: BoxFit.cover,
+              fit: BoxFit.fitHeight,
+              errorBuilder: (_, __, ___) {
+                return Image.asset(
+                  'assets/images/dummy.jpg',
+                  fit: BoxFit.fitHeight,
+                );
+              },
             )
-                : Icon(Icons.image_not_supported, size: 80, color: Colors.grey),
+                : Image.asset(
+              'assets/images/dummy.jpg',
+              fit: BoxFit.fitHeight,
+            ),
           ),
 
           const SizedBox(height: 32),
 
-          // 정보
           Padding(
             padding: EdgeInsets.symmetric(horizontal: 16),
             child: Column(
@@ -299,7 +285,6 @@ class _PerfumeDetailScreenState extends State<PerfumeDetailScreen> {
                   ),
                 SizedBox(height: 12),
 
-                // ❤️ + 👜
                 Row(
                   children: [
                     IconButton(
@@ -307,7 +292,8 @@ class _PerfumeDetailScreenState extends State<PerfumeDetailScreen> {
                         _isFavorite
                             ? Icons.favorite
                             : Icons.favorite_border_outlined,
-                        color: _isFavorite ? Colors.redAccent : Colors.grey[700],
+                        color:
+                        _isFavorite ? Colors.redAccent : Colors.grey[700],
                       ),
                       onPressed: _toggleWishlist,
                     ),
@@ -316,8 +302,9 @@ class _PerfumeDetailScreenState extends State<PerfumeDetailScreen> {
                         _isPurchased
                             ? Icons.add_circle
                             : Icons.add_circle_outline,
-                        color:
-                        _isPurchased ? Color(0xFF3C463A) : Colors.grey[700],
+                        color: _isPurchased
+                            ? Color(0xFF3C463A)
+                            : Colors.grey[700],
                       ),
                       onPressed: _togglePurchased,
                     ),
@@ -327,7 +314,6 @@ class _PerfumeDetailScreenState extends State<PerfumeDetailScreen> {
             ),
           ),
 
-          // 탭
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Column(
@@ -346,9 +332,6 @@ class _PerfumeDetailScreenState extends State<PerfumeDetailScreen> {
     );
   }
 
-  // --------------------------
-  // 탭 UI
-  // --------------------------
   Widget _buildTabBar() {
     const tabs = ["계열", "노트", "발향"];
 
@@ -378,15 +361,16 @@ class _PerfumeDetailScreenState extends State<PerfumeDetailScreen> {
     );
   }
 
-  // --------------------------
-  // 계열 탭
-  // --------------------------
   Widget _buildAccordsTab(PerfumeDetailModel perfume) {
     final accords = perfume.mainAccords ?? [];
-    final raw = perfume.mainAccordsPercentage as Map<String, dynamic>? ?? {};
+    final raw = perfume.mainAccordsPercentage ?? {};
+
+    if (accords.isEmpty) {
+      return Center(child: Text("계열 정보가 없습니다."));
+    }
+
     final percentages = raw.map((k, v) => MapEntry(k, v.toString()));
 
-    // 그룹 매핑
     final Map<String, List<String>> groups = {
       "플로럴": ["floral", "rose", "jasmine", "violet"],
       "프루티": ["fruit", "apple", "pear"],
@@ -400,7 +384,6 @@ class _PerfumeDetailScreenState extends State<PerfumeDetailScreen> {
       "기타": [],
     };
 
-    // 색상
     final Map<String, Color> colors = {
       "플로럴": Color(0xFFFFC1CC),
       "프루티": Color(0xFFFFE4B5),
@@ -431,8 +414,7 @@ class _PerfumeDetailScreenState extends State<PerfumeDetailScreen> {
       if (!matched) count["기타"] = count["기타"]! + 1;
     }
 
-    final total =
-    count.values.fold<int>(0, (a, b) => a + b).clamp(1, 999999);
+    final total = count.values.fold<int>(0, (a, b) => a + b).clamp(1, 999999);
     final valid = count.keys.where((k) => count[k]! > 0).toList();
 
     final sections = valid.map((g) {
@@ -451,28 +433,24 @@ class _PerfumeDetailScreenState extends State<PerfumeDetailScreen> {
       children: [
         Text("계열별 분포", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
         SizedBox(height: 12),
-        if (sections.isEmpty)
-          Text("계열 정보가 없습니다.")
-        else
-          Center(
-            child: SizedBox(
-              height: 260,
-              width: 260,
-              child: PieChart(
-                PieChartData(
-                  startDegreeOffset: -90,
-                  centerSpaceRadius: 50,
-                  sections: sections,
-                  sectionsSpace: 2,
-                ),
+        Center(
+          child: SizedBox(
+            height: 260,
+            width: 260,
+            child: PieChart(
+              PieChartData(
+                startDegreeOffset: -90,
+                centerSpaceRadius: 50,
+                sections: sections,
+                sectionsSpace: 2,
               ),
             ),
           ),
+        ),
         SizedBox(height: 24),
         Text("세부 어코드", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
         SizedBox(height: 12),
 
-        // 어코드 리스트
         Container(
           padding: EdgeInsets.all(12),
           decoration: BoxDecoration(
@@ -541,13 +519,14 @@ class _PerfumeDetailScreenState extends State<PerfumeDetailScreen> {
     );
   }
 
-  // --------------------------
-  // 노트 탭
-  // --------------------------
   Widget _buildNotesTab(PerfumeDetailModel p) {
     final top = p.topNotes ?? [];
     final mid = p.middleNotes ?? [];
     final base = p.baseNotes ?? [];
+
+    if (top.isEmpty && mid.isEmpty && base.isEmpty) {
+      return Center(child: Text("노트 정보가 없습니다."));
+    }
 
     final notes = {
       "Top": top,
@@ -586,7 +565,7 @@ class _PerfumeDetailScreenState extends State<PerfumeDetailScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: items.map((n) {
-                final text = n is Map<String, dynamic> ? n["name"] ?? "" : n.toString();
+                final text = n["name"] ?? "";
                 return Container(
                   width: 68,
                   height: 68,
@@ -611,12 +590,13 @@ class _PerfumeDetailScreenState extends State<PerfumeDetailScreen> {
     );
   }
 
-  // --------------------------
-  // 발향(지속력/확산력)
-  // --------------------------
   Widget _buildSillageTab(PerfumeDetailModel p) {
-    final lonRaw = p.longevity ?? 0.0;
-    final silRaw = p.sillage ?? 0.0;
+    final lonRaw = p.longevity ?? -1;
+    final silRaw = p.sillage ?? -1;
+
+    if (lonRaw < 0 && silRaw < 0) {
+      return Center(child: Text("발향 정보가 없습니다."));
+    }
 
     final lon = (lonRaw / 100).clamp(0.0, 1.0);
     final sil = (silRaw / 100).clamp(0.0, 1.0);

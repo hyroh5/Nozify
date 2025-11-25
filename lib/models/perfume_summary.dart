@@ -19,7 +19,7 @@ class PerfumeSummary {
 
   factory PerfumeSummary.fromJson(Map<String, dynamic> json) {
     return PerfumeSummary(
-      id: json["id"],
+      id: json["id"] as String,
       name: json["name"],
       brandName: json["brand_name"],
       imageUrl: json["image_url"],

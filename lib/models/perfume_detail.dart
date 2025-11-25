@@ -1,4 +1,3 @@
-// lib/models/perfume_detail.dart
 class PerfumeDetailModel {
   final String id;
   final String name;
@@ -8,15 +7,15 @@ class PerfumeDetailModel {
   final String? gender;
   final double? price;
   final String? currency;
-  final double? longevity; // 0~100 가정
-  final double? sillage;   // 0~100 가정
+  final double? longevity;
+  final double? sillage;
 
   final List<String>? mainAccords;
   final Map<String, dynamic>? mainAccordsPercentage;
 
-  final List<dynamic>? topNotes;
-  final List<dynamic>? middleNotes;
-  final List<dynamic>? baseNotes;
+  final List<Map<String, dynamic>>? topNotes;
+  final List<Map<String, dynamic>>? middleNotes;
+  final List<Map<String, dynamic>>? baseNotes;
   final List<dynamic>? generalNotes;
 
   final Map<String, dynamic>? seasonRanking;
@@ -54,6 +53,28 @@ class PerfumeDetailModel {
   });
 
   factory PerfumeDetailModel.fromJson(Map<String, dynamic> json) {
+    List<dynamic>? safeList(dynamic data) {
+      if (data is List) return data;
+      return null;
+    }
+
+    List<Map<String, dynamic>>? safeMapList(dynamic data) {
+      if (data is List) {
+        return data.whereType<Map<String, dynamic>>().toList();
+      }
+      return null;
+    }
+
+    Map<String, dynamic>? safeRanking(dynamic data) {
+      if (data is List) {
+        return {
+          for (final e in data)
+            if (e is Map && e['name'] != null) e['name']: e['score']
+        };
+      }
+      return null;
+    }
+
     return PerfumeDetailModel(
       id: json['id'] as String,
       name: json['name'] as String? ?? '',
@@ -65,17 +86,24 @@ class PerfumeDetailModel {
       currency: json['currency'] as String?,
       longevity: (json['longevity'] as num?)?.toDouble(),
       sillage: (json['sillage'] as num?)?.toDouble(),
-      mainAccords: (json['main_accords'] as List?)
+
+      mainAccords: safeList(json['main_accords'])
           ?.map((e) => e.toString())
           .toList(),
+
       mainAccordsPercentage:
-      json['main_accords_percentage'] as Map<String, dynamic>?,
-      topNotes: json['top_notes'] as List?,
-      middleNotes: json['middle_notes'] as List?,
-      baseNotes: json['base_notes'] as List?,
-      generalNotes: json['general_notes'] as List?,
-      seasonRanking: json['season_ranking'] as Map<String, dynamic>?,
-      occasionRanking: json['occasion_ranking'] as Map<String, dynamic>?,
+      json['main_accords_percentage'] is Map<String, dynamic>
+          ? json['main_accords_percentage']
+          : null,
+
+      topNotes: safeMapList(json['top_notes']),
+      middleNotes: safeMapList(json['middle_notes']),
+      baseNotes: safeMapList(json['base_notes']),
+      generalNotes: safeList(json['general_notes']),
+
+      seasonRanking: safeRanking(json['season_ranking']),
+      occasionRanking: safeRanking(json['occasion_ranking']),
+
       purchaseUrl: json['purchase_url'] as String?,
       fragellaId: json['fragella_id'] as String?,
       viewCount: (json['view_count'] as num?)?.toInt(),

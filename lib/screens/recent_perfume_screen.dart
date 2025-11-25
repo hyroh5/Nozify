@@ -129,6 +129,12 @@ class _RecentPerfumeScreenState extends State<RecentPerfumeScreen> {
                 height: 108,
                 width: 90,
                 fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) {
+                  return Image.asset(
+                    'assets/images/dummy.jpg',
+                    fit: BoxFit.fitHeight,
+                  );
+                },
               )
                   : Image.asset(
                 'assets/images/dummy.jpg',

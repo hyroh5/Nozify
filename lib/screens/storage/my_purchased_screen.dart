@@ -142,6 +142,12 @@ class _MyPurchasedScreenState extends State<MyPurchasedScreen> {
                 height: 108,
                 width: 90,
                 fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) {
+                  return Image.asset(
+                    'assets/images/dummy.jpg',
+                    fit: BoxFit.fitHeight,
+                  );
+                },
               ),
             ),
             const SizedBox(height: 6),

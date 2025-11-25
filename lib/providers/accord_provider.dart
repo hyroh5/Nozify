@@ -11,7 +11,7 @@ class AccordProvider extends ChangeNotifier {
   bool isLoading = false;
 
   /// GET /catalog/perfumes?accords=xxx&limit=12
-  Future<void> fetchPerfumesByAccord(String accord, {int limit = 30}) async {
+  Future<void> fetchPerfumesByAccord(String accord, {int limit = 50}) async {
     isLoading = true;
     notifyListeners();
 
@@ -20,7 +20,7 @@ class AccordProvider extends ChangeNotifier {
         "/catalog/perfumes",
         query: {
           "accords": accord,
-          "limit": (limit ?? 30).toString(),
+          "limit": (limit ?? 50).toString(),
         },
       );
 
