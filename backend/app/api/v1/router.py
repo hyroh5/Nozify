@@ -14,7 +14,7 @@ from app.api.routes.user.purchase_history import router as purchase_history_rout
 from app.api.routes.catalog.perfumes import router as perfumes_router
 from app.api.routes.catalog.seasonal import router as seasonal_router
 from app.api.routes.recommendations_today import router as recommendations_today_router
-
+from app.api.routes.recommendations_brand import router as recommendations_brand_router
 
 api_v1 = APIRouter()
 api_v1.include_router(health_router)
@@ -40,3 +40,4 @@ api_v1.include_router(pbti_router, tags=["PBTI"])
 api_v1.include_router(perfumes_router, tags=["Catalog"])
 api_v1.include_router(seasonal_router, tags=["Seasonal"])
 api_v1.include_router(recommendations_today_router)
+api_v1.include_router(recommendations_brand_router)

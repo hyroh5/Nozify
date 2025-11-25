@@ -277,6 +277,7 @@ def recommend_by_pbti(
             db.query(
                 Perfume.id,
                 Perfume.name,
+                Perfume.image_url,
                 Perfume.F_W_Score,
                 Perfume.L_H_Score,
                 Perfume.S_P_Score,
@@ -323,6 +324,7 @@ def recommend_by_pbti(
             "perfume_id": perfume_id_safe,
             "name": row.name,
             "brand_name": row.brand_name,
+            "image_url": row.image_url,
             "score": match_score,
         })
 
@@ -337,6 +339,7 @@ def recommend_by_pbti(
             perfume_id=p["perfume_id"],
             name=p["name"],
             brand_name=p["brand_name"],
+            image_url=p["image_url"],
             score=p["score"],
         )
         for p in top_recommendations

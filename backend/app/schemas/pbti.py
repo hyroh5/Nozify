@@ -53,6 +53,7 @@ class PBTIRecommendationItem(BaseModel):
     perfume_id: str
     name: str
     brand_name: Optional[str] = None
+    image_url: Optional[str] = None
     score: float
 
 
