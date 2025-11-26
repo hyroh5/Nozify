@@ -7,20 +7,21 @@ import 'auth_provider.dart';
 
 import '../models/pbti_result.dart';
 import '../models/perfume_simple.dart';
-import '../models/pbti_axis_recommendation.dart';   // 🔥 축별 추천 전체 모델
+import '../models/pbti_axis_recommendation.dart';
 
 class PbtiProvider with ChangeNotifier {
-  /// 서버에서 가져온 PBTI 코드 리스트 (최신순)
   List<String> _results = [];
 
   List<String> get results => _results;
   bool get hasResult => _results.isNotEmpty;
 
-  /// 가장 최근 코드
   String? get latestCode => hasResult ? _results.first : null;
 
-  /// 로그인된 유저의 PBTI 히스토리를 서버에서 로드
+  /// 로그인된 유저의 PBTI 히스토리 로드
   Future<void> loadResults(AuthProvider auth) async {
+    // 🔥 1) AuthProvider 초기 로딩이 끝날 때까지 기다리기
+    await auth.waitUntilLoaded();   // ← 여기 추가
+
     if (!auth.isLoggedIn) {
       _results = [];
       notifyListeners();
@@ -41,7 +42,8 @@ class PbtiProvider with ChangeNotifier {
 
       final List<dynamic> jsonList = jsonDecode(res.body);
       _results = jsonList
-          .map<String>((e) => (e as Map<String, dynamic>)['final_type'] as String? ?? '----')
+          .map<String>((e) =>
+      (e as Map<String, dynamic>)['final_type'] as String? ?? '----')
           .toList();
 
       notifyListeners();
@@ -73,7 +75,6 @@ class PbtiProvider with ChangeNotifier {
     }
 
     final Map<String, dynamic> json = jsonDecode(res.body);
-
     final result = PbtiResultModel.fromJson(json);
 
     await loadResults(auth);
@@ -81,13 +82,12 @@ class PbtiProvider with ChangeNotifier {
     return result;
   }
 
-  /// 로그아웃 시 초기화
   void clear() {
     _results = [];
     notifyListeners();
   }
 
-  /// 🔥 기존 추천 API (그냥 리스트)
+  /// 기본 추천 API
   Future<List<PerfumeSimple>> fetchRecommendations() async {
     final res = await ApiClient.I.get(
       "/pbti/recommendations",
@@ -99,14 +99,12 @@ class PbtiProvider with ChangeNotifier {
     }
 
     final Map<String, dynamic> data = jsonDecode(res.body);
-    List<dynamic> items = data['items'] ?? [];
+    final items = data['items'] ?? [];
 
-    return items
-        .map((e) => PerfumeSimple.fromJson(e))
-        .toList();
+    return items.map((e) => PerfumeSimple.fromJson(e)).toList();
   }
 
-  /// 🔥 PBti 축별 추천 API
+  /// 축별 추천 API
   Future<PbtiByTypeRecommendation> fetchByTypeRecommendations() async {
     final res = await ApiClient.I.get(
       "/pbti/recommendations/by_type",
@@ -118,8 +116,6 @@ class PbtiProvider with ChangeNotifier {
     }
 
     final Map<String, dynamic> data = jsonDecode(res.body);
-
-    /// 🔥 축 전체 모델로 파싱해야 정상!
     return PbtiByTypeRecommendation.fromJson(data);
   }
 }
