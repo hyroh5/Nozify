@@ -13,6 +13,7 @@ from app.models.perfume import Perfume
 from app.models.brand import Brand
 
 from app.services.recommendation_service import get_pbti_recommendations_by_type
+from app.models.base import uuid_hex_to_bytes
 
 from app.schemas.pbti import (
     PBTISubmitRequest,
@@ -348,6 +349,7 @@ def recommend_by_pbti(
     return PBTIRecommendationsResponse(final_type=final_type, items=items)
 
 
+
 @router.get("/recommendations/by_type")
 def recommend_by_pbti_type(
     db: Session = Depends(get_db),
@@ -381,22 +383,40 @@ def recommend_by_pbti_type(
         formatted_list: List[PBTIRecommendationItem] = []
         for p in perfumes:
             raw_id = p["id"]
+
+            # 1) perfume_id 문자열로 통일
             try:
                 if isinstance(raw_id, bytes) and len(raw_id) == 16:
                     safe_id = str(uuid.UUID(bytes=raw_id))
+                    perfume_pk = raw_id
                 elif isinstance(raw_id, str):
                     safe_id = raw_id
+                    # HEX UUID 문자열이라고 가정하고 BINARY(16)으로 변환
+                    try:
+                        perfume_pk = uuid.UUID(safe_id).bytes
+                    except Exception:
+                        perfume_pk = None
                 else:
                     safe_id = str(raw_id)
+                    perfume_pk = None
             except Exception as e:
-                logger.error(f"Error converting type-based perfume ID: {raw_id!r}. Error: {e}")
+                logger.error(f"Perfume ID conversion failed for ID: {raw_id!r}. Error: {e}")
                 continue
 
+            # 2) Perfume 테이블에서 image_url 조회
+            image_url = None
+            if perfume_pk is not None:
+                perfume_obj = db.get(Perfume, perfume_pk)
+                if perfume_obj is not None:
+                    image_url = perfume_obj.image_url
+
+            # 3) 스키마에 image_url 채워서 반환
             formatted_list.append(
                 PBTIRecommendationItem(
                     perfume_id=safe_id,
                     name=p["name"],
                     brand_name=p.get("brand"),
+                    image_url=image_url,   # ← 여기서 실제 값 들어감
                     score=1.0,
                 )
             )
