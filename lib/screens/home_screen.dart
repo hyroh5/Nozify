@@ -6,6 +6,7 @@ import '../providers/auth_provider.dart';
 import '../providers/pbti_provider.dart';
 import '../providers/brand_recommendation_provider.dart';
 import '../providers/trending_provider.dart';
+import '../providers/recent_view_provider.dart';
 
 import '../widgets/topbar/appbar_ver1.dart';
 import '../widgets/bottom_navbar.dart';
@@ -57,9 +58,12 @@ class _HomeScreenState extends State<HomeScreen> {
       final today = context.read<TodayRecommendationProvider>();
       final brand = context.read<BrandRecommendationProvider>();
       final trending = context.read<TrendingProvider>();
+      final recent = context.read<RecentViewProvider>();
+
 
       today.fetchTodayRecommendations();
       trending.fetchTrending();
+      recent.fetchRecentViews();
 
       final auth = context.read<AuthProvider>();
       final pbti = context.read<PbtiProvider>();
@@ -68,6 +72,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
       if (auth.isLoggedIn) {
         brand.fetchBrandList();
+        recent.fetchRecentViews();
       }
 
       if (!auth.isLoggedIn || !pbti.hasResult) {
@@ -98,6 +103,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final brandProvider = context.watch<BrandRecommendationProvider>();
     final isLoggedIn = context.watch<AuthProvider>().isLoggedIn;
     final trending = context.watch<TrendingProvider>();
+    final recentProvider = context.watch<RecentViewProvider>();
 
     return Scaffold(
       appBar: const AppBarVer1(),
@@ -197,6 +203,82 @@ class _HomeScreenState extends State<HomeScreen> {
                 const SizedBox(height: 16),
                 _buildBrandPerfumeList(brandProvider),
               ],
+              // =======================================================
+              // ⑤ 최근 본 향수 기반 추천 (로그인 시만)
+              // =======================================================
+              if (isLoggedIn) ...[
+                const SizedBox(height: 32),
+                const HomeSectionTitle(title: "최근 본 향수"),
+
+                // ----- 최근 본 향수 리스트 -----
+                SizedBox(
+                  height: 120,
+                  child: recentProvider.isLoadingRecent
+                      ? const Center(child: CircularProgressIndicator())
+                      : recentProvider.recentViews.isEmpty
+                      ? const Center(
+                    child: Text("최근 본 향수가 없어요."),
+                  )
+                      : ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: recentProvider.recentViews.length,
+                    itemBuilder: (_, i) {
+                      final item = recentProvider.recentViews[i];
+
+                      return GestureDetector(
+                        onTap: () {
+                          recentProvider.fetchSimilar(item.perfumeId);
+                        },
+                        child: Container(
+                          width: 110,
+                          margin: const EdgeInsets.only(right: 8),
+                          child: Column(
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: Image.network(
+                                  item.imageUrl ?? "",
+                                  height: 72,
+                                  width: 72,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) => _dummy(),
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                item.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 11),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+
+                const SizedBox(height: 20),
+
+                // ----- 유사 추천 리스트 -----
+                if (recentProvider.similarPerfumes.isNotEmpty) ...[
+                  const HomeSectionTitle(title: "이 향수와 비슷한 추천"),
+                  const SizedBox(height: 12),
+
+                  SizedBox(
+                    height: 220,
+                    child: recentProvider.isLoadingSimilar
+                        ? const Center(child: CircularProgressIndicator())
+                        : ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: recentProvider.similarPerfumes.length,
+                      itemBuilder: (_, i) =>
+                          _buildPerfumeCard(recentProvider.similarPerfumes[i].toSimple()),
+                    ),
+                  ),
+                ],
+              ],
 
               // =======================================================
               // ④ PBTI 축 기반 추천 (로그인 + PBti 결과 있을 때)
@@ -240,7 +322,7 @@ class _HomeScreenState extends State<HomeScreen> {
               // =======================================================
               // ④ 요즘 트렌딩 중인 향수
               // =======================================================
-              const SizedBox(height: 28),
+              const SizedBox(height: 24),
               const HomeSectionTitle(title: "지금 트렌딩 중인 향수"),
               const SizedBox(height: 12),
 
@@ -330,7 +412,7 @@ class _HomeScreenState extends State<HomeScreen> {
       case "Byredo": return "$base/byredo.png";
       case "Calvin Klein": return "$base/ck.png";
       case "Chanel": return "$base/chanel.png";
-      case "Dior": return "a$base/dior.png";
+      case "Dior": return "$base/dior.png";
       case "Diptyque": return "$base/diptyque.png";
       case "Giorgio Armani": return "$base/giorgio_armani.png";
       case "Givenchy": return "$base/givenchy.png";
