@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../providers/today_recommendation_provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/pbti_provider.dart';
+import '../providers/brand_recommendation_provider.dart';
 
 import '../widgets/topbar/appbar_ver1.dart';
 import '../widgets/bottom_navbar.dart';
@@ -14,7 +15,7 @@ import '../screens/perfume_detail_screen.dart';
 import '../screens/accord_perfumes_screen.dart';
 
 import '../models/perfume_simple.dart';
-import '../models/pbti_axis_recommendation.dart'; // 축 정의용 (유지)
+import '../models/pbti_axis_recommendation.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -45,19 +46,26 @@ class _HomeScreenState extends State<HomeScreen> {
   ];
 
   // ------------------------------------------------------------
-  // initState → 오늘의 향수 + PBti 축별 추천 동시 로딩
+  // initState → 오늘의 향수 + PBTI 축별 추천 + 브랜드 리스트 로딩
   // ------------------------------------------------------------
   @override
   void initState() {
     super.initState();
+
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final today = context.read<TodayRecommendationProvider>();
+      final brand = context.read<BrandRecommendationProvider>();
+
       today.fetchTodayRecommendations();
 
       final auth = context.read<AuthProvider>();
       final pbti = context.read<PbtiProvider>();
 
       await pbti.loadResults(auth);
+
+      if (auth.isLoggedIn) {
+        brand.fetchBrandList();
+      }
 
       if (!auth.isLoggedIn || !pbti.hasResult) {
         setState(() => _pbtiAvailable = false);
@@ -84,6 +92,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final todayProvider = context.watch<TodayRecommendationProvider>();
+    final brandProvider = context.watch<BrandRecommendationProvider>();
     final isLoggedIn = context.watch<AuthProvider>().isLoggedIn;
 
     return Scaffold(
@@ -122,20 +131,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       imageUrl: todayProvider.items[index].imageUrl,
                     );
 
-                    return GestureDetector(
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => PerfumeDetailScreen(
-                              perfumeId: simple.id,
-                              fromStorage: false,
-                            ),
-                          ),
-                        );
-                      },
-                      child: _buildPerfumeCard(simple),
-                    );
+                    return _buildPerfumeCard(simple);
                   },
                 ),
               ),
@@ -186,7 +182,20 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
 
               // =======================================================
-              // ③ PBTI 축 기반 정방향 / 역방향 추천 (로그인 + PBti 있음)
+              // ③ 자주 보는 브랜드별 추천 (로그인 시만)
+              // =======================================================
+              if (isLoggedIn) ...[
+                const SizedBox(height: 32),
+                const HomeSectionTitle(title: "자주 보는 브랜드별 추천"),
+                const SizedBox(height: 12),
+
+                _buildBrandSelector(brandProvider),
+                const SizedBox(height: 16),
+                _buildBrandPerfumeList(brandProvider),
+              ],
+
+              // =======================================================
+              // ④ PBTI 축 기반 추천 (로그인 + PBti 결과 있을 때)
               // =======================================================
               if (_pbtiAvailable) ...[
                 const SizedBox(height: 28),
@@ -195,7 +204,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   const Center(child: CircularProgressIndicator())
 
                 else if (_byType != null) ...[
-                  // -------------------- 정방향 추천 --------------------
                   HomeSectionTitle(title: _forwardAxisLabel(_byType!.finalType)),
                   const SizedBox(height: 12),
 
@@ -211,7 +219,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
                   const SizedBox(height: 24),
 
-                  // -------------------- 역방향 추천 --------------------
                   HomeSectionTitle(title: _reverseAxisLabel(_byType!.finalType)),
                   const SizedBox(height: 12),
 
@@ -239,33 +246,112 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // =======================================================
-  // 정방향 축 라벨
+  // 브랜드 선택 원형 UI
   // =======================================================
-  String _forwardAxisLabel(String type) {
-    final c1 = type[0];
-    final c2 = type[1];
+  Widget _buildBrandSelector(BrandRecommendationProvider p) {
+    if (p.isLoadingBrands) {
+      return const SizedBox(
+        height: 80,
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
 
-    final a1 = c1 == 'F' ? 'FRESH' : 'WARM';
-    final a2 = c2 == 'L' ? 'LIGHT' : 'HEAVY';
+    if (p.brands.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 32),
+        child: Text("최근 본 브랜드 데이터가 부족합니다."),
+      );
+    }
 
-    return "$a1 & $a2한 향을 좋아하는 당신에게 추천드려요";
+    return SizedBox(
+      height: 80,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        itemCount: p.brands.length,
+        itemBuilder: (_, i) {
+          final brand = p.brands[i];
+          return GestureDetector(
+            onTap: () => p.fetchBrandPerfumes(brand.id),
+            child: Container(
+              margin: const EdgeInsets.only(right: 12),
+              width: 70,
+              height: 70,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white,
+                border: Border.all(color: Colors.black12),
+              ),
+              child: Center(
+                child: Image.asset(
+                  _mapBrandLogo(brand.name),
+                  width: 46,
+                  height: 46,
+                  fit: BoxFit.fill,
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  // 브랜드 로고 매핑
+  String _mapBrandLogo(String name) {
+    const base = 'assets/images/brand';
+    switch (name) {
+      case "Burberry": return "$base/burberry.png";
+      case "Byredo": return "$base/byredo.png";
+      case "Calvin Klein": return "$base/ck.png";
+      case "Chanel": return "$base/chanel.png";
+      case "Dior": return "a$base/dior.png";
+      case "Diptyque": return "$base/diptyque.png";
+      case "Giorgio Armani": return "$base/giorgio_armani.png";
+      case "Givenchy": return "$base/givenchy.png";
+      case "Gucci": return "$base/gucci.png";
+      case "Guerlain": return "$base/guerlain.png";
+      case "Hermes": return "$base/hermes.png";
+      case "Jo Malone London": return "$base/jomalone.png";
+      case "Maison Francis Kurkdjian": return "$base/maison.png";
+      case "Mugler": return "$base/mugler.png";
+      case "Tom Ford": return "$base/tomford.png";
+      case "Versace": return "$base/versace.png";
+      case "Yves Saint Laurent": return "$base/ysl.png";
+      case "Montblanc": return "$base/montblanc.png";
+      default: return "$base/default.png";
+    }
   }
 
   // =======================================================
-  // 역방향 축 라벨
+  // 브랜드 추천 향수 카드 리스트
   // =======================================================
-  String _reverseAxisLabel(String type) {
-    final c3 = type[2];
-    final c4 = type[3];
+  Widget _buildBrandPerfumeList(BrandRecommendationProvider p) {
+    if (p.isLoadingPerfumes) {
+      return const SizedBox(
+        height: 200,
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
 
-    final a3 = c3 == 'S' ? 'SPICY' : 'SWEET';
-    final a4 = c4 == 'N' ? 'MODERN' : 'NATURAL';
+    if (p.brandPerfumes.isEmpty) {
+      return const SizedBox(
+        height: 220,
+        child: Center(child: Text("브랜드를 선택해보세요")),
+      );
+    }
 
-    return "$a3 & $a4 계열도 시도해보세요";
+    return SizedBox(
+      height: 220,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        itemCount: p.brandPerfumes.length,
+        itemBuilder: (_, i) => _buildPerfumeCard(p.brandPerfumes[i]),
+      ),
+    );
   }
 
   // =======================================================
-  // 단일 PerfumeCard (Today + PBti 공용)
+  // Perfume Card (공용)
   // =======================================================
   Widget _buildPerfumeCard(PerfumeSimple item) {
     return Container(
@@ -303,8 +389,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 style: const TextStyle(color: Colors.grey, fontSize: 10)),
             Text(
               item.name,
-              style: const TextStyle(
-                  fontSize: 11, fontWeight: FontWeight.w600),
+              style:
+              const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
@@ -342,8 +428,8 @@ class _HomeScreenState extends State<HomeScreen> {
           child: GestureDetector(
             onTap: () => provider.setOccasion(opt['key']!),
             child: Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 12, vertical: 6),
+              padding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(20),
                 color: selected ? Colors.black : Colors.white,
@@ -365,3 +451,30 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 }
+
+// =======================================================
+// 정방향 축 라벨
+// =======================================================
+String _forwardAxisLabel(String type) {
+  final c1 = type[0];
+  final c2 = type[1];
+
+  final a1 = c1 == 'F' ? 'FRESH' : 'WARM';
+  final a2 = c2 == 'L' ? 'LIGHT' : 'HEAVY';
+
+  return "$a1 & $a2한 향을 좋아하는 당신에게 추천드려요";
+}
+
+// =======================================================
+// 역방향 축 라벨
+// =======================================================
+String _reverseAxisLabel(String type) {
+  final c3 = type[2];
+  final c4 = type[3];
+
+  final a3 = c3 == 'S' ? 'SPICY' : 'SWEET';
+  final a4 = c4 == 'N' ? 'MODERN' : 'NATURAL';
+
+  return "$a3 & $a4 계열도 시도해보세요";
+}
+

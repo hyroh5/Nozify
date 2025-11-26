@@ -2,14 +2,17 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:carousel_slider/carousel_slider.dart';
-import 'package:sw_showcase/models/perfume_simple.dart';
 
 import '../../providers/auth_provider.dart';
 import '../../providers/pbti_provider.dart';
-import '../../models/pbti_recommendation.dart';
+
+import '../../models/pbti_history.dart';
+import '../../models/perfume_simple.dart';
+
 import '../../widgets/topbar/appbar_ver2.dart';
 import '../../widgets/bottom_navbar.dart';
 import '../../widgets/custom_drawer.dart';
+
 import '../home_screen.dart';
 import 'pbti_intro_screen.dart';
 import '../perfume_detail_screen.dart';
@@ -25,12 +28,11 @@ class _PbtiMainScreenState extends State<PbtiMainScreen> {
   int _currentPage = 0;
   int _selectedIndex = 2;
 
-  /// 서버에서 받아온 PBTI 코드 리스트 (최신순)
-  List<String> pbtiResults = [];
+  /// 히스토리
+  List<PbtiHistoryItem> pbtiResults = [];
 
-  /// 추천 향수 리스트
+  /// 추천 향수
   List<PerfumeSimple> recommendations = [];
-
   bool isLoadingRecommendations = true;
 
   @override
@@ -40,34 +42,46 @@ class _PbtiMainScreenState extends State<PbtiMainScreen> {
       final auth = context.read<AuthProvider>();
       final pbtiProvider = context.read<PbtiProvider>();
 
-      // 1) 서버에서 PBTI 히스토리 로드
+      // 1) 히스토리 불러오기
       await pbtiProvider.loadResults(auth);
-      setState(() {
-        pbtiResults = pbtiProvider.results;
-      });
+      setState(() => pbtiResults = pbtiProvider.results);
 
-      // 2) 최근 PBTI 기반 추천 향수 요청 (파라미터 필요 없음!)
+      // 2) 추천 불러오기 (기본 추천)
       try {
         final rec = await pbtiProvider.fetchRecommendations();
         setState(() {
           recommendations = rec;
           isLoadingRecommendations = false;
         });
-      } catch (e) {
+      } catch (_) {
         setState(() => isLoadingRecommendations = false);
       }
     });
   }
 
-  Future<void> _deleteType(int index) async {
-    setState(() {
-      pbtiResults.removeAt(index);
-    });
+  // ------------------------------
+  // 삭제
+  // ------------------------------
+  Future<void> _deleteType(PbtiHistoryItem item) async {
+    final pbti = context.read<PbtiProvider>();
+
+    try {
+      await pbti.deleteHistory(item.id);
+
+      setState(() {
+        pbtiResults.removeWhere((e) => e.id == item.id);
+      });
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("삭제 실패: $e")),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final totalCards = pbtiResults.length + 1;
+    final isLoggedIn = context.watch<AuthProvider>().isLoggedIn;
 
     return Scaffold(
       appBar: AppBarVer2(
@@ -88,7 +102,7 @@ class _PbtiMainScreenState extends State<PbtiMainScreen> {
             children: [
               const SizedBox(height: 20),
 
-              // 🔹 캐릭터 캐러셀
+              // 🔹 캐러셀
               CarouselSlider.builder(
                 itemCount: totalCards,
                 options: CarouselOptions(
@@ -96,17 +110,12 @@ class _PbtiMainScreenState extends State<PbtiMainScreen> {
                   enlargeCenterPage: true,
                   viewportFraction: 0.38,
                   enableInfiniteScroll: false,
-                  onPageChanged: (index, reason) {
-                    setState(() => _currentPage = index);
-                  },
+                  onPageChanged: (index, _) =>
+                      setState(() => _currentPage = index),
                 ),
-                itemBuilder: (context, index, realIdx) {
+                itemBuilder: (context, index, _) {
                   final bool isAddCard = index == pbtiResults.length;
                   final bool isCenter = _currentPage == index;
-
-                  // 🔥 로그인 상태 체크
-                  final auth = context.watch<AuthProvider>();
-                  final isLoggedIn = auth.isLoggedIn;
 
                   return AnimatedContainer(
                     duration: const Duration(milliseconds: 250),
@@ -116,98 +125,24 @@ class _PbtiMainScreenState extends State<PbtiMainScreen> {
                       child: Stack(
                         fit: StackFit.expand,
                         children: [
+                          // 기존 카드
                           if (!isAddCard)
-                            Container(
-                              color: Colors.white,
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  ImageFiltered(
-                                    imageFilter: ImageFilter.blur(
-                                      sigmaX: isCenter ? 0 : 5,
-                                      sigmaY: isCenter ? 0 : 5,
-                                    ),
-                                    child: Image.asset(
-                                      getPbtiImage(pbtiResults[index]),
-                                      height: isCenter ? 150 : 120,
-                                      fit: BoxFit.contain,
-                                    ),
-                                  ),
-                                  if (isCenter) ...[
-                                    const SizedBox(height: 16),
-                                    Text(
-                                      pbtiResults[index],
-                                      style: const TextStyle(
-                                        fontSize: 36,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                    const Text(
-                                      "당신의 향수 성향 코드",
-                                      style: TextStyle(color: Colors.grey),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            )
+                            _buildHistoryCard(pbtiResults[index], isCenter)
+
+                          // 새 카드
                           else
-                            GestureDetector(
-                              onTap: () {
-                                if (isLoggedIn) {
-                                  // 🔥 로그인한 경우 → PBtiIntroScreen 진입
-                                  Navigator.pushReplacement(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => const PBTIIntroScreen(),
-                                    ),
-                                  );
-                                } else {
-                                  // 🔥 비로그인 → Snackbar + LoginScreen 이동
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text("로그인 후 이용할 수 있습니다."),
-                                      duration: Duration(seconds: 2),
-                                    ),
-                                  );
-                                }
-                              },
+                            _buildAddCard(isCenter, isLoggedIn),
 
-                              child: Container(
-                                color: Colors.white,
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Image.asset(
-                                      "assets/images/PBTI/newPBTI.png",
-                                      height: isCenter ? 150 : 120,
-                                      fit: BoxFit.contain,
-                                    ),
-                                    if (isCenter) ...[
-                                      const SizedBox(height: 16),
-                                      Text(
-                                        "테스트하러 가기", // 항상 동일 문구 유지
-                                        style: TextStyle(
-                                          fontSize: 20,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.black87,
-                                        ),
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                              ),
-                            ),
-
+                          // 삭제 버튼
                           if (!isAddCard && isCenter)
                             Positioned(
                               top: 8,
                               right: 12,
                               child: IconButton(
-                                icon: const Icon(
-                                  Icons.close,
-                                  color: Colors.black54,
-                                ),
-                                onPressed: () => _deleteType(index),
+                                icon: const Icon(Icons.close,
+                                    color: Colors.black54),
+                                onPressed: () =>
+                                    _deleteType(pbtiResults[index]),
                               ),
                             ),
                         ],
@@ -219,56 +154,8 @@ class _PbtiMainScreenState extends State<PbtiMainScreen> {
 
               const SizedBox(height: 40),
 
-              // 🔹 내 취향 추천 향수 (API 기반)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      "내 취향을 반영한 추천 향수",
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    const Divider(color: Colors.black12, thickness: 1),
-
-                    SizedBox(
-                      height: 180,
-                      child: Builder(
-                        builder: (_) {
-                          if (isLoadingRecommendations) {
-                            return const Center(
-                                child: CircularProgressIndicator());
-                          }
-
-                          if (recommendations.isEmpty) {
-                            return const Center(
-                              child: Text(
-                                "추천 결과가 없습니다.",
-                                style: TextStyle(color: Colors.grey),
-                              ),
-                            );
-                          }
-
-                          return ListView.builder(
-                            scrollDirection: Axis.horizontal,
-                            itemCount: recommendations.length,
-                            itemBuilder: (_, index) {
-                              final item = recommendations[index];
-                              return _buildPerfumeCard(item);
-                            },
-                          );
-                        },
-                      ),
-                    ),
-
-                    const Divider(color: Colors.black12, thickness: 1),
-                  ],
-                ),
-              ),
+              // 🔹 추천 향수 리스트
+              _buildRecommendationSection(),
             ],
           ),
         ),
@@ -289,9 +176,139 @@ class _PbtiMainScreenState extends State<PbtiMainScreen> {
     );
   }
 
-  /// ------------------------
-  /// 향수 카드 위젯
-  /// ------------------------
+  // ----------------------------------------------------
+  // 히스토리 카드
+  // ----------------------------------------------------
+  Widget _buildHistoryCard(PbtiHistoryItem item, bool isCenter) {
+    return Container(
+      color: Colors.white,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          ImageFiltered(
+            imageFilter: ImageFilter.blur(
+              sigmaX: isCenter ? 0 : 5,
+              sigmaY: isCenter ? 0 : 5,
+            ),
+            child: Image.asset(
+              getPbtiImage(item.finalType),
+              height: isCenter ? 150 : 120,
+              fit: BoxFit.contain,
+            ),
+          ),
+          if (isCenter) ...[
+            const SizedBox(height: 16),
+            Text(
+              item.finalType,
+              style: const TextStyle(
+                  fontSize: 36, fontWeight: FontWeight.bold),
+            ),
+            const Text("당신의 향수 성향 코드",
+                style: TextStyle(color: Colors.grey)),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // ----------------------------------------------------
+  // 새 카드
+  // ----------------------------------------------------
+  Widget _buildAddCard(bool isCenter, bool isLoggedIn) {
+    return GestureDetector(
+      onTap: () {
+        if (!isLoggedIn) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("로그인 후 이용할 수 있습니다.")),
+          );
+          return;
+        }
+
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const PBTIIntroScreen()),
+        );
+      },
+      child: Container(
+        color: Colors.white,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Image.asset(
+              "assets/images/PBTI/newPBTI.png",
+              height: isCenter ? 150 : 120,
+              fit: BoxFit.contain,
+            ),
+            if (isCenter) ...[
+              const SizedBox(height: 16),
+              const Text(
+                "테스트하러 가기",
+                style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87),
+              ),
+            ]
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ----------------------------------------------------
+  // 추천 향수 섹션
+  // ----------------------------------------------------
+  Widget _buildRecommendationSection() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            "내 취향을 반영한 추천 향수",
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 12),
+          const Divider(color: Colors.black12, thickness: 1),
+
+          SizedBox(
+            height: 180,
+            child: Builder(
+              builder: (_) {
+                if (isLoadingRecommendations) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                if (recommendations.isEmpty) {
+                  return const Center(
+                    child: Text(
+                      "추천 결과가 없습니다.",
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                  );
+                }
+
+                return ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: recommendations.length,
+                  itemBuilder: (_, index) {
+                    final item = recommendations[index];
+                    return _buildPerfumeCard(item);
+                  },
+                );
+              },
+            ),
+          ),
+
+          const Divider(color: Colors.black12, thickness: 1),
+        ],
+      ),
+    );
+  }
+
+  // ----------------------------------------------------
+  // 향수 카드 공용 컴포넌트
+  // ----------------------------------------------------
   Widget _buildPerfumeCard(PerfumeSimple item) {
     return GestureDetector(
       onTap: () {
@@ -309,45 +326,37 @@ class _PbtiMainScreenState extends State<PbtiMainScreen> {
         width: 150,
         margin: const EdgeInsets.only(right: 8),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.start,
           children: [
             const SizedBox(height: 8),
             ClipRRect(
               borderRadius: BorderRadius.circular(12),
               child: Image.network(
-                item.imageUrl ?? "",
+                item.imageUrl ?? '',
                 height: 108,
                 width: 90,
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) {
-                  return Image.asset(
-                    'assets/images/dummy.jpg',
-                    height: 108,
-                    width: 190,
-                    fit: BoxFit.cover,
-                  );
-                },
-              )
+                errorBuilder: (_, __, ___) =>
+                    Image.asset('assets/images/dummy.jpg',
+                        height: 108,
+                        width: 90,
+                        fit: BoxFit.cover),
+              ),
             ),
             const SizedBox(height: 8),
             Text(
               item.brandName,
-              style: const TextStyle(color: Colors.grey, fontSize: 10),
-              maxLines: 1,
+              style: const TextStyle(
+                  color: Colors.grey, fontSize: 10),
               overflow: TextOverflow.ellipsis,
+              maxLines: 1,
             ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: Text(
-                item.name,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 11,
-                ),
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
+            Text(
+              item.name,
+              style: const TextStyle(
+                  fontWeight: FontWeight.w600, fontSize: 11),
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              maxLines: 1,
             ),
             const SizedBox(height: 8),
           ],
@@ -356,9 +365,9 @@ class _PbtiMainScreenState extends State<PbtiMainScreen> {
     );
   }
 
-  /// ------------------------
-  /// PBTI 코드 → 이미지 매핑
-  /// ------------------------
+  // ----------------------------------------------------
+  // PBti 이미지 매핑
+  // ----------------------------------------------------
   String getPbtiImage(String code) {
     const base = 'assets/images/PBTI';
     switch (code) {

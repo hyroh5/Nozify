@@ -62,6 +62,7 @@ flutter:
   assets:
     - assets/images/
     - assets/images/PBTI/
+    - assets/images/brand/
     - assets/fonts/
   uses-material-design: true
 

@@ -1,6 +1,7 @@
 // main。dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:sw_showcase/providers/brand_recommendation_provider.dart';
 import 'package:sw_showcase/providers/purchased_provider.dart';
 import 'package:sw_showcase/providers/wishlist_provider.dart';
 import 'package:sw_showcase/screens/loading_screen.dart';
@@ -10,6 +11,7 @@ import 'providers/recent_perfume_provider.dart';
 import 'providers/pbti_provider.dart';
 import 'providers/accord_provider.dart';
 import 'providers/today_recommendation_provider.dart';
+import 'providers/brand_recommendation_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -28,7 +30,8 @@ void main() async {
         ChangeNotifierProvider(create: (_) => PurchasedProvider()),
         ChangeNotifierProvider(create: (_) => PbtiProvider()),
         ChangeNotifierProvider(create: (_) => AccordProvider()),
-        ChangeNotifierProvider(create: (_) => TodayRecommendationProvider())
+        ChangeNotifierProvider(create: (_) => TodayRecommendationProvider()),
+        ChangeNotifierProvider(create: (_) => BrandRecommendationProvider(),)
       ],
       child: const MyApp(),
     ),
