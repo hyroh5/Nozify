@@ -15,6 +15,10 @@ from app.api.routes.catalog.perfumes import router as perfumes_router
 from app.api.routes.catalog.seasonal import router as seasonal_router
 from app.api.routes.recommendations_today import router as recommendations_today_router
 from app.api.routes.recommendations_brand import router as recommendations_brand_router
+from app.api.routes.recommendations_trending import router as recommendations_trending_router
+from app.api.routes.recommendations_opposite import router as recommendations_opposite_router
+
+
 
 api_v1 = APIRouter()
 api_v1.include_router(health_router)
@@ -41,3 +45,6 @@ api_v1.include_router(perfumes_router, tags=["Catalog"])
 api_v1.include_router(seasonal_router, tags=["Seasonal"])
 api_v1.include_router(recommendations_today_router)
 api_v1.include_router(recommendations_brand_router)
+api_v1.include_router(recommendations_trending_router)
+api_v1.include_router(recommendations_opposite_router, tags=["Recommendations"])
+
