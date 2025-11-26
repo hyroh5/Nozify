@@ -12,6 +12,7 @@ import 'providers/pbti_provider.dart';
 import 'providers/accord_provider.dart';
 import 'providers/today_recommendation_provider.dart';
 import 'providers/brand_recommendation_provider.dart';
+import 'providers/trending_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -24,14 +25,15 @@ void main() async {
     MultiProvider(
       providers: [
         ChangeNotifierProvider.value(value: calendarProvider),
-        ChangeNotifierProvider(create: (_) => AuthProvider()),
-        ChangeNotifierProvider(create: (_) => RecentPerfumeProvider()),
-        ChangeNotifierProvider(create: (_) => WishlistProvider()),
-        ChangeNotifierProvider(create: (_) => PurchasedProvider()),
-        ChangeNotifierProvider(create: (_) => PbtiProvider()),
         ChangeNotifierProvider(create: (_) => AccordProvider()),
+        ChangeNotifierProvider(create: (_) => AuthProvider()),
+        ChangeNotifierProvider(create: (_) => BrandRecommendationProvider()),
+        ChangeNotifierProvider(create: (_) => PbtiProvider()),
+        ChangeNotifierProvider(create: (_) => PurchasedProvider()),
+        ChangeNotifierProvider(create: (_) => RecentPerfumeProvider()),
         ChangeNotifierProvider(create: (_) => TodayRecommendationProvider()),
-        ChangeNotifierProvider(create: (_) => BrandRecommendationProvider(),)
+        ChangeNotifierProvider(create: (_) => TrendingProvider()),
+        ChangeNotifierProvider(create: (_) => WishlistProvider()),
       ],
       child: const MyApp(),
     ),

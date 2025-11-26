@@ -5,6 +5,7 @@ import '../providers/today_recommendation_provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/pbti_provider.dart';
 import '../providers/brand_recommendation_provider.dart';
+import '../providers/trending_provider.dart';
 
 import '../widgets/topbar/appbar_ver1.dart';
 import '../widgets/bottom_navbar.dart';
@@ -46,7 +47,7 @@ class _HomeScreenState extends State<HomeScreen> {
   ];
 
   // ------------------------------------------------------------
-  // initState → 오늘의 향수 + PBTI 축별 추천 + 브랜드 리스트 로딩
+  // initState → 오늘의 향수 + PBTI 축별 추천 + 브랜드 리스트 + 트렌딩 로딩
   // ------------------------------------------------------------
   @override
   void initState() {
@@ -55,8 +56,10 @@ class _HomeScreenState extends State<HomeScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final today = context.read<TodayRecommendationProvider>();
       final brand = context.read<BrandRecommendationProvider>();
+      final trending = context.read<TrendingProvider>();
 
       today.fetchTodayRecommendations();
+      trending.fetchTrending();
 
       final auth = context.read<AuthProvider>();
       final pbti = context.read<PbtiProvider>();
@@ -94,6 +97,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final todayProvider = context.watch<TodayRecommendationProvider>();
     final brandProvider = context.watch<BrandRecommendationProvider>();
     final isLoggedIn = context.watch<AuthProvider>().isLoggedIn;
+    final trending = context.watch<TrendingProvider>();
 
     return Scaffold(
       appBar: const AppBarVer1(),
@@ -233,6 +237,28 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ],
               ],
+              // =======================================================
+              // ④ 요즘 트렌딩 중인 향수
+              // =======================================================
+              const SizedBox(height: 28),
+              const HomeSectionTitle(title: "지금 트렌딩 중인 향수"),
+              const SizedBox(height: 12),
+
+              SizedBox(
+                height: 196,
+                child: trending.isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : trending.items.isEmpty
+                    ? const Center(
+                  child: Text("트렌딩 향수를 불러오지 못했어요.",
+                      style: TextStyle(color: Colors.grey)),
+                )
+                    : ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: trending.items.length,
+                  itemBuilder: (_, i) => _buildPerfumeCard(trending.items[i]),
+                ),
+              ),
             ],
           ),
         ),
