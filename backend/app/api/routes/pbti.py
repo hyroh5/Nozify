@@ -22,7 +22,7 @@ from app.schemas.pbti import (
     PBTIRecommendationsResponse,
     PBTIRecommendationItem,
 )
-
+import random
 import logging
 logger = logging.getLogger(__name__)
 
@@ -80,6 +80,7 @@ def _format_result_response(r: PBTIResult) -> PBTIResultResponse:
     confidence = float(round(sum(confs) / 4.0, 3))
 
     return PBTIResultResponse(
+        id=r.id,
         temperature_score=r.temperature_score or 0,
         texture_score=r.texture_score or 0,
         mood_score=r.mood_score or 0,
@@ -247,6 +248,65 @@ def get_all_pbti_results(
     return [_format_result_response(r) for r in results]
 
 
+import random  # 파일 상단에 이미 없다면 추가
+
+LETTER_TO_WORD = {
+    "F": "Fresh",
+    "W": "Warm",
+    "L": "Light",
+    "H": "Heavy",
+    "S": "Sweet",
+    "P": "Spicy",
+    "N": "Natural",
+    "M": "Modern",
+}
+
+
+def _focus_match_score(
+    user_scores: Dict[str, int],
+    perfume_scores: Dict[str, float],
+    focus_axes: set[int],
+) -> float:
+    """
+    선택된 축(focus_axes)에 대해서만 부분 매칭 점수를 계산.
+    axis 번호:
+      1 -> F_W_Score  (temperature)
+      2 -> L_H_Score  (texture)
+      3 -> S_P_Score  (mood)
+      4 -> N_M_Score  (nature)
+    """
+    if not focus_axes:
+        return 0.0
+
+    # 유저 점수를 -100 ~ 100 구간으로 센터링
+    user_centered = {
+        1: user_scores["temperature_score"] * 2 - 100,
+        2: user_scores["texture_score"] * 2 - 100,
+        3: user_scores["mood_score"] * 2 - 100,
+        4: user_scores["nature_score"] * 2 - 100,
+    }
+
+    axis_to_perfume_key = {
+        1: "F_W_Score",
+        2: "L_H_Score",
+        3: "S_P_Score",
+        4: "N_M_Score",
+    }
+
+    diff_sum = 0.0
+    for axis in focus_axes:
+        p_key = axis_to_perfume_key[axis]
+        u_val = user_centered[axis]
+        p_val = float(perfume_scores.get(p_key) or 0.0)
+        diff_sum += abs(u_val - p_val)
+
+    # 축 하나당 최대 차이 200 → 선택한 축 개수만큼 스케일
+    max_diff = 200.0 * len(focus_axes)
+    score = 1.0 - (diff_sum / max_diff)
+    return max(0.0, min(1.0, float(round(score, 3))))
+
+
+
 @router.get("/recommendations", response_model=PBTIRecommendationsResponse)
 def recommend_by_pbti(
     db: Session = Depends(get_db),
@@ -264,8 +324,11 @@ def recommend_by_pbti(
     if not user_result:
         raise HTTPException(status_code=404, detail="active pbti result not found for user")
 
-    final_type = user_result.final_type or ""
+    final_type = (user_result.final_type or "").strip()
+    if len(final_type) != 4:
+        raise HTTPException(status_code=400, detail="invalid final_type in pbti result")
 
+    # 1) 유저 4축 점수
     user_pbti_scores = {
         "temperature_score": user_result.temperature_score or 50,
         "texture_score": user_result.texture_score or 50,
@@ -273,6 +336,21 @@ def recommend_by_pbti(
         "nature_score": user_result.nature_score or 50,
     }
 
+    # 2) final_type 글자 → 축별 형용사 매핑
+    #    예: WHPM -> {1: Warm, 2: Heavy, 3: Spicy, 4: Modern}
+    axis_words: Dict[int, str] = {}
+    for idx, ch in enumerate(final_type, start=1):
+        axis_words[idx] = LETTER_TO_WORD.get(ch, "")
+
+    # 3) 4축 중 2개를 랜덤으로 선택 → heading + focus 축 결정
+    all_axes = [1, 2, 3, 4]
+    focus_axes = set(random.sample(all_axes, 2))
+
+    word1 = axis_words[min(focus_axes)]
+    word2 = axis_words[max(focus_axes)]
+    heading = f"{word1}, {word2}한 당신에게 어울리는 향이에요"
+
+    # 4) 향수 프로파일 로딩 (pbti_type 포함)
     try:
         perfume_rows = (
             db.query(
@@ -283,6 +361,7 @@ def recommend_by_pbti(
                 Perfume.L_H_Score,
                 Perfume.S_P_Score,
                 Perfume.N_M_Score,
+                Perfume.pbti_type,
                 Brand.name.label("brand_name"),
             )
             .join(Brand, Perfume.brand_id == Brand.id)
@@ -293,12 +372,27 @@ def recommend_by_pbti(
         raise HTTPException(status_code=500, detail="향수 프로파일 데이터를 가져오는 중 오류가 발생했습니다")
 
     if not perfume_rows:
-        return PBTIRecommendationsResponse(final_type=final_type, items=[])
+        return PBTIRecommendationsResponse(final_type=final_type, heading=heading, items=[])
 
     scored_perfumes: List[Dict[str, Any]] = []
     skipped_count = 0
 
     for row in perfume_rows:
+        # 4-1) pbti_type 축 글자도 헤딩 축과 맞는 향수만 사용
+        p_type: str | None = getattr(row, "pbti_type", None)
+        if not p_type or len(p_type) != 4:
+            continue
+
+        # focus_axes에 해당하는 위치의 글자가 유저 final_type과 같지 않으면 스킵
+        mismatch = False
+        for axis in focus_axes:
+            # axis 1~4 → 인덱스 0~3
+            if p_type[axis - 1] != final_type[axis - 1]:
+                mismatch = True
+                break
+        if mismatch:
+            continue
+
         perfume_pbti_scores = {
             "F_W_Score": row.F_W_Score or 0.0,
             "L_H_Score": row.L_H_Score or 0.0,
@@ -306,7 +400,10 @@ def recommend_by_pbti(
             "N_M_Score": row.N_M_Score or 0.0,
         }
 
-        match_score = calculate_match_score(user_pbti_scores, perfume_pbti_scores)
+        # 4-2) 선택된 축에 대해서만 매칭 점수 계산
+        focus_match = _focus_match_score(user_pbti_scores, perfume_pbti_scores, focus_axes)
+        if focus_match <= 0.0:
+            continue
 
         raw_perfume_id = row.id
         try:
@@ -321,17 +418,22 @@ def recommend_by_pbti(
             skipped_count += 1
             continue
 
+        # 4-3) 약간의 랜덤 노이즈를 섞어서 정렬시 랜덤성 부여
+        jitter = random.uniform(-0.03, 0.03)
+        final_score = max(0.0, min(1.0, focus_match + jitter))
+
         scored_perfumes.append({
             "perfume_id": perfume_id_safe,
             "name": row.name,
             "brand_name": row.brand_name,
             "image_url": row.image_url,
-            "score": match_score,
+            "score": final_score,
         })
 
     if skipped_count > 0:
         logger.warning(f"{skipped_count} items skipped due to ID conversion errors")
 
+    # 5) 점수 내림차순 정렬 후 상위 limit개
     scored_perfumes.sort(key=lambda x: x["score"], reverse=True)
     top_recommendations = scored_perfumes[:limit]
 
@@ -346,7 +448,12 @@ def recommend_by_pbti(
         for p in top_recommendations
     ]
 
-    return PBTIRecommendationsResponse(final_type=final_type, items=items)
+    return PBTIRecommendationsResponse(
+        final_type=final_type,
+        heading=heading,
+        items=items,
+    )
+
 
 
 
@@ -428,3 +535,36 @@ def recommend_by_pbti_type(
         "recommendations_by_type": formatted_recommendations,
         "message": f"PBTI 타입 {final_type}에 대한 5가지 카테고리별 추천 결과입니다",
     }
+
+
+@router.delete("/result/{result_id}", status_code=204)
+def delete_single_pbti_result(
+    result_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_id),
+):
+    """
+    특정 PBTI 결과(result_id) 하나만 삭제하는 API
+    - 본인 소유인지 체크
+    - 삭제 후 204 반환
+    """
+    current_user_id_bytes = current_user.id
+
+    # 해당 result가 현재 유저 소유인지 확인
+    result = (
+        db.query(PBTIResult)
+        .filter(
+            PBTIResult.id == result_id,
+            PBTIResult.user_id == current_user_id_bytes
+        )
+        .first()
+    )
+
+    if not result:
+        raise HTTPException(status_code=404, detail="해당 PBTI 결과를 찾을 수 없습니다.")
+
+    # 삭제
+    db.delete(result)
+    db.commit()
+
+    return

@@ -35,6 +35,7 @@ class PBTISubmitResponse(BaseModel):
 # routes/pbti.py get_my_pbti_result 반환과 일치
 # =========================
 class PBTIResultResponse(BaseModel):
+    id: int
     temperature_score: int
     texture_score: int
     mood_score: int
@@ -58,5 +59,7 @@ class PBTIRecommendationItem(BaseModel):
 
 
 class PBTIRecommendationsResponse(BaseModel):
-    final_type: str
+    final_type: str         # 예: "FWSP"
+    heading: str            # 예: "Warm, Spicy한 당신에게 어울리는 향이에요"
     items: List[PBTIRecommendationItem]
+
