@@ -1,4 +1,3 @@
-# backend/app/api/routes/vision/scan.py
 from fastapi import APIRouter, File, UploadFile, HTTPException, Form
 from typing import Optional
 import json, traceback, time
@@ -94,6 +93,50 @@ def dedup_merge(list1, list2):
     return list(out.values())
 
 
+def merge_texts_by_line(texts, y_tol: float = 0.02):
+    """
+    y 중심이 비슷한 텍스트들을 한 줄로 묶어서 반환.
+    matcher에는 이 병합 결과를 넘기고,
+    원본 texts는 그대로 응답에 포함시킨다.
+    """
+    if not texts:
+        return []
+
+    lines = {}
+    for t in texts:
+        b = t.get("box", {})
+        cy = b.get("y", 0.0) + b.get("h", 0.0) / 2.0
+        key = round(cy / y_tol) * y_tol
+        lines.setdefault(key, []).append(t)
+
+    merged = []
+    for _, items in lines.items():
+        items = sorted(items, key=lambda r: r["box"]["x"])
+
+        line_text = " ".join(r["text"] for r in items)
+
+        xs = [r["box"]["x"] for r in items]
+        ys = [r["box"]["y"] for r in items]
+        ws = [r["box"]["w"] for r in items]
+        hs = [r["box"]["h"] for r in items]
+
+        x0 = min(xs)
+        y0 = min(ys)
+        x1 = max(x + w for x, w in zip(xs, ws))
+        y1 = max(y + h for y, h in zip(ys, hs))
+
+        merged.append(
+            {
+                "text": line_text,
+                "confidence": max(r["confidence"] for r in items),
+                "box": {"x": x0, "y": y0, "w": x1 - x0, "h": y1 - y0},
+            }
+        )
+
+    print(f"[LOG][OCR] merged lines: {merged}")
+    return merged
+
+
 @router.post("/scan")
 async def scan(
     image: UploadFile = File(...),
@@ -179,12 +222,13 @@ async def scan(
     t_det1 = time.time()
 
     # ---------- ROI ----------
-    if det["bbox"]["w"] > 0 and det["bbox"]["h"] > 0:
+    area_ratio = det.get("area_ratio", 0.0)
+    if det["bbox"]["w"] > 0 and det["bbox"]["h"] > 0 and area_ratio >= 0.02:
         roi = _roi_from_bbox(det["bbox"], w, h)
-        print(f"[LOG][ROI] from detection bbox → roi={roi}")
+        print(f"[LOG][ROI] from detection bbox → roi={roi}, area_ratio={area_ratio:.4f}")
     else:
         roi = _fallback_roi(w, h)
-        print(f"[LOG][ROI] fallback roi → roi={roi}")
+        print(f"[LOG][ROI] fallback roi → roi={roi}, area_ratio={area_ratio:.4f}")
 
     # ---------- OCR ----------
     t_ocr0 = time.time()
@@ -280,8 +324,11 @@ async def scan(
     # ---------- 매칭 ----------
     t_m0 = time.time()
     try:
-        match = get_match(texts, user_query or "")
-        print(f"[LOG][MATCH] → final={match.get('final')}, candidates={match.get('candidates')}")
+        merged_texts = merge_texts_by_line(texts)
+        match = get_match(merged_texts, user_query or "")
+        print(
+            f"[LOG][MATCH] → final={match.get('final')}, candidates={match.get('candidates')}"
+        )
     except Exception as e:
         print("[LOG][MATCH][ERROR]", e)
         traceback.print_exc()

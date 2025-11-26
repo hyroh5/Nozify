@@ -129,6 +129,23 @@ class BottleDetector:
                 bh = clamp01(bh)
                 bbox = {"x": bx, "y": by, "w": bw, "h": bh}
 
+                # bbox 검증: 너무 얇거나, 너무 작으면 실패로 처리
+                area_ratio = bbox["w"] * bbox["h"]
+                ar = (bbox["h"] + 1e-6) / (bbox["w"] + 1e-6)
+                if area_ratio < 0.02 or bbox["h"] < 0.1 or ar < 0.3:
+                    print(
+                        f"[LOG][DETECT][PT] invalid bbox -> area_ratio={area_ratio:.4f}, "
+                        f"h={bbox['h']:.3f}, ar={ar:.3f}"
+                    )
+                    return {
+                        "present": False,
+                        "score": 0.0,
+                        "mask_polygon": None,
+                        "bbox": {"x": 0, "y": 0, "w": 0, "h": 0},
+                        "area_ratio": 0.0,
+                        "inside_ratio": 0.0,
+                    }
+
                 poly = None
                 if getattr(res, "masks", None) is not None and len(res.masks.xy) > best:
                     pts = res.masks.xy[best]
@@ -139,7 +156,7 @@ class BottleDetector:
                     "score": top_conf,
                     "mask_polygon": poly,
                     "bbox": bbox,
-                    "area_ratio": bw * bh,
+                    "area_ratio": float(area_ratio),
                     "inside_ratio": 1.0,
                 }
             except Exception as e:
@@ -182,7 +199,12 @@ class BottleDetector:
             nby = y0 / orig_h
             nbw = (x1 - x0) / orig_w
             nbh = (y1 - y0) / orig_h
-            bbox = {"x": clamp01(nbx), "y": clamp01(nby), "w": clamp01(nbw), "h": clamp01(nbh)}
+            bbox = {
+                "x": clamp01(nbx),
+                "y": clamp01(nby),
+                "w": clamp01(nbw),
+                "h": clamp01(nbh),
+            }
 
             npoly = []
             for px, py in poly:
@@ -190,6 +212,23 @@ class BottleDetector:
                 npoly.append([clamp01(ox / orig_w), clamp01(oy / orig_h)])
 
             area_ratio = bbox["w"] * bbox["h"]
+            ar = (bbox["h"] + 1e-6) / (bbox["w"] + 1e-6)
+
+            # 여기서도 bbox 검증
+            if area_ratio < 0.02 or bbox["h"] < 0.1 or ar < 0.3:
+                print(
+                    f"[LOG][DETECT][ONNX] invalid bbox -> area_ratio={area_ratio:.4f}, "
+                    f"h={bbox['h']:.3f}, ar={ar:.3f}"
+                )
+                return {
+                    "present": False,
+                    "score": 0.0,
+                    "mask_polygon": None,
+                    "bbox": {"x": 0, "y": 0, "w": 0, "h": 0},
+                    "area_ratio": 0.0,
+                    "inside_ratio": 0.0,
+                }
+
             return {
                 "present": True,
                 "score": 1.0,
@@ -209,6 +248,7 @@ class BottleDetector:
             "area_ratio": 0.0,
             "inside_ratio": 0.0,
         }
+
 
 
 from functools import lru_cache

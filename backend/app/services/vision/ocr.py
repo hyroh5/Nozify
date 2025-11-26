@@ -1,226 +1,114 @@
 # backend/app/services/vision/ocr.py
+
+from functools import lru_cache
+from typing import List, Dict, Any, Optional
 import numpy as np
-import pytesseract
-import math
-from typing import List, Dict, Any, Iterable
+
 from app.core.config import VisionConfig
-from .utils import clamp01, _load_cv2
+from app.services.vision.utils import _load_cv2
 
 
-def _clahe(gray: np.ndarray) -> np.ndarray:
-    cv2 = _load_cv2()
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-    return clahe.apply(gray)
+_ocr_engine = None
 
 
-def _preprocess_variants(gray: np.ndarray) -> Iterable[np.ndarray]:
-    cv2 = _load_cv2()
-    g = cv2.GaussianBlur(gray, (3, 3), 0)
+def _get_ocr_engine():
+    """
+    PaddleOCR 엔진을 singleton 형태로 초기화해서 재사용.
+    """
+    global _ocr_engine
+    if _ocr_engine is None:
+        from paddleocr import PaddleOCR
 
-    _, th_bin = cv2.threshold(g, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    _, th_inv = cv2.threshold(g, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+        # VisionConfig.OCR_LANGS 에서 첫 번째 언어만 사용
+        raw_lang = (VisionConfig.OCR_LANGS or "en").split(",")[0].strip().lower()
+        # 환경에 eng라고 들어와도 PaddleOCR에서 인식하는 코드로 매핑
+        if raw_lang == "eng":
+            raw_lang = "en"
+        if raw_lang == "kor":
+            raw_lang = "korean"
 
-    at = cv2.adaptiveThreshold(
-        g, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-        cv2.THRESH_BINARY, 31, 9
-    )
-    at_inv = cv2.bitwise_not(at)
+        print(f"[OCR] init PaddleOCR lang={raw_lang}")
 
-    k = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
-    yield cv2.morphologyEx(th_bin, cv2.MORPH_CLOSE, k, iterations=1)
-    yield cv2.morphologyEx(th_inv, cv2.MORPH_CLOSE, k, iterations=1)
-    yield cv2.morphologyEx(at, cv2.MORPH_CLOSE, k, iterations=1)
-    yield cv2.morphologyEx(at_inv, cv2.MORPH_CLOSE, k, iterations=1)
+        # ⚠ 중요: use_gpu, show_log 같은 인자 절대 넣지 말 것
+        _ocr_engine = PaddleOCR(
+            lang=raw_lang
+            # 필요하면 여기서만 천천히 옵션 늘리는 식으로
+            # det=True, rec=True, use_angle_cls=True 등
+        )
 
-
-def _tess(img: np.ndarray, psm: int) -> Dict[str, List]:
-    langs = VisionConfig.OCR_LANGS.replace(",", "+")
-    config = f"-l {langs} --oem 3 --psm {psm}"
-    return pytesseract.image_to_data(
-        img, config=config, output_type=pytesseract.Output.DICT
-    )
-
-
-def _rotate_bound(image: np.ndarray, angle: float) -> np.ndarray:
-    cv2 = _load_cv2()
-    h, w = image.shape[:2]
-    cX, cY = (w // 2, h // 2)
-    M = cv2.getRotationMatrix2D((cX, cY), angle, 1.0)
-    cos, sin = (abs(M[0, 0]), abs(M[0, 1]))
-    nW = int((h * sin) + (w * cos))
-    nH = int((h * cos) + (w * sin))
-    M[0, 2] += (nW / 2) - cX
-    M[1, 2] += (nH / 2) - cY
-    return cv2.warpAffine(
-        image, M, (nW, nH),
-        flags=cv2.INTER_CUBIC,
-        borderMode=cv2.BORDER_REPLICATE
-    )
+    return _ocr_engine
 
 
-def _is_symbolic(s: str) -> bool:
-    s = s.strip()
-    if not s:
-        return True
-    letters = sum(ch.isalpha() for ch in s)
-    digits = sum(ch.isdigit() for ch in s)
-    return (letters + digits) == 0 or (len(s) == 1 and not s.isalpha())
 
+# ---------- 메인 OCR 함수 ----------
 
 def run_ocr(img_bgr, roi=None) -> List[Dict[str, Any]]:
     cv2 = _load_cv2()
-
     h, w = img_bgr.shape[:2]
-    print(f"[LOG][OCR] OCR 시작, ROI={roi if roi else '전체 이미지'}")
+    print(f"[LOG][OCR] PaddleOCR 시작, ROI={roi if roi else '전체 이미지'}")
 
+    # ROI 크롭
     if roi:
         x, y, rw, rh = roi
-        crop = img_bgr[y:y + rh, x:x + rw]
+        crop = img_bgr[y:y+rh, x:x+rw]
     else:
         x, y, rw, rh = 0, 0, w, h
         crop = img_bgr
 
-    gray0 = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
-    gray0 = _clahe(gray0)
+    # BGR -> RGB
+    img_rgb = cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)
 
-    results: List[Dict[str, Any]] = []
+    ocr = _get_ocr_engine()
+    # 결과 형식: [ [ [box, (text, score)], ... ] ]
+    result = ocr.ocr(img_rgb, cls=True)
 
-    angles = (-25, -18, -12, -8, -5, 0, 5, 8, 12, 18, 25)
-    scales = (1.0, 1.6, 2.2, 2.8)
+    texts: List[Dict[str, Any]] = []
 
-    for ang in angles:
-        g_rot = _rotate_bound(gray0, ang)
-        for scale in scales:
-            g = cv2.resize(
-                g_rot, None, fx=scale, fy=scale,
-                interpolation=cv2.INTER_CUBIC
-            )
+    if not result:
+        print("[LOG][OCR] 결과 없음")
+        return texts
 
-            for th in _preprocess_variants(g):
-                for psm in (11, 7, 6):
-                    data = _tess(th, psm)
-                    n = len(data["text"])
+    for line in result[0]:
+        box, (txt, score) = line
+        # box: 4점 좌표 [(x1,y1), (x2,y2), (x3,y3), (x4,y4)]
+        xs = [p[0] for p in box]
+        ys = [p[1] for p in box]
+        bx0, by0 = min(xs), min(ys)
+        bx1, by1 = max(xs), max(ys)
 
-                    for i in range(n):
-                        raw = data["text"][i]
-                        if raw is None:
-                            continue
-                        txt = str(raw).strip()
+        # ROI 좌표를 원본 좌표로 복원
+        abs_x0 = bx0 + x
+        abs_y0 = by0 + y
+        abs_x1 = bx1 + x
+        abs_y1 = by1 + y
 
-                        try:
-                            conf = float(data["conf"][i]) / 100.0
-                        except Exception:
-                            conf = 0.0
+        nx = clamp01(abs_x0 / w)
+        ny = clamp01(abs_y0 / h)
+        nw = clamp01((abs_x1 - abs_x0) / w)
+        nh = clamp01((abs_y1 - abs_y0) / h)
 
-                        if conf < 0.55 or _is_symbolic(txt):
-                            continue
+        texts.append(
+            {
+                "text": str(txt).upper(),
+                "confidence": float(score),
+                "box": {"x": nx, "y": ny, "w": nw, "h": nh},
+            }
+        )
 
-                        bx = int(data["left"][i] / scale)
-                        by = int(data["top"][i] / scale)
-                        bw2 = int(data["width"][i] / scale)
-                        bh2 = int(data["height"][i] / scale)
-
-                        bx += x
-                        by += y
-                        box = {"x": bx / w, "y": by / h, "w": bw2 / w, "h": bh2 / h}
-
-                        results.append(
-                            {"text": txt.upper(), "confidence": conf, "box": box}
-                        )
-
-                if len(results) >= 12:
-                    break
-            if len(results) >= 12:
-                break
-        if len(results) >= 12:
-            break
-
+    # 간단 중복 제거
     dedup = {}
-    for r in results:
+    for r in texts:
         key = (r["text"], round(r["box"]["x"], 3), round(r["box"]["y"], 3))
         if key not in dedup or r["confidence"] > dedup[key]["confidence"]:
             dedup[key] = r
 
     texts = list(dedup.values())
-    print(f"[LOG][OCR] OCR 결과: {texts}")
+    print(f"[LOG][OCR] PaddleOCR 결과 토큰 수={len(texts)}, texts={texts}")
     return texts
 
+# ---------- 회전 OCR: Paddle 버전에서는 그냥 run_ocr 재사용 ----------
 
 def run_ocr_rotated(img_bgr, roi=None, angles=None):
-    cv2 = _load_cv2()
-
-    if angles is None:
-        angles = [-18, -12, -9, -6, -3, 0, 3, 6, 9, 12, 18]
-
-    h0, w0 = img_bgr.shape[:2]
-    if roi:
-        x, y, rw, rh = roi
-        crop = img_bgr[y:y + rh, x:x + rw]
-    else:
-        x, y, rw, rh = 0, 0, w0, h0
-        crop = img_bgr
-
-    best = {"score": -1e9, "texts": []}
-    KEYWORDS = {"EAU", "PARFUM", "PARFUME", "CHANEL", "ALL", "OF", "ME", "NARCISO", "RODRIGUEZ", "N°", "NO", "Nº"}
-
-    for ang in angles:
-        h, w = crop.shape[:2]
-        cx, cy = w / 2.0, h / 2.0
-        M = cv2.getRotationMatrix2D((cx, cy), ang, 1.0)
-        rot = cv2.warpAffine(
-            crop, M, (w, h),
-            flags=cv2.INTER_CUBIC,
-            borderMode=cv2.BORDER_REPLICATE
-        )
-
-        toks = run_ocr(rot, roi=None)
-
-        if toks:
-            confs = [t["confidence"] for t in toks]
-            hi = sum(c >= 0.80 for c in confs)
-            mean_c = float(np.mean(confs))
-            bonus = 0.0
-            for t in toks:
-                if any(k in t["text"] for k in KEYWORDS):
-                    bonus += 0.2
-            score = hi + 0.5 * mean_c + bonus
-        else:
-            score = -1
-
-        if score > best["score"]:
-            M_inv = cv2.invertAffineTransform(M)
-            restored = []
-
-            for t in toks:
-                bx = t["box"]
-                px = bx["x"] * w
-                py = bx["y"] * h
-                pw = bx["w"] * w
-                ph = bx["h"] * h
-
-                p1 = np.dot(M_inv, np.array([px, py, 1.0]))
-                p2 = np.dot(M_inv, np.array([px + pw, py + ph, 1.0]))
-                rx0, ry0 = p1[0], p1[1]
-                rx1, ry1 = p2[0], p2[1]
-
-                ox0 = (rx0 + x) / w0
-                oy0 = (ry0 + y) / h0
-                ow = max(1.0, (rx1 - rx0)) / w0
-                oh = max(1.0, (ry1 - ry0)) / h0
-
-                restored.append(
-                    {
-                        "text": t["text"],
-                        "confidence": t["confidence"],
-                        "box": {
-                            "x": clamp01(ox0),
-                            "y": clamp01(oy0),
-                            "w": clamp01(ow),
-                            "h": clamp01(oh),
-                        },
-                    }
-                )
-
-            best = {"score": score, "texts": restored}
-
-    return best["texts"]
+    # PaddleOCR 자체가 어느 정도 기울기 보정 / 각도 분류를 해주므로
+    # 별도로 회전 스캔하지 않고 동일 함수 재사용
+    return run_ocr(img_bgr, roi=roi)

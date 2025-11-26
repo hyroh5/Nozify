@@ -48,7 +48,7 @@ class Settings(BaseSettings):
 
 class VisionConfig:
     DEVICE = os.getenv("VISION_DEVICE", "cpu")
-    MODEL_PATH = _abs(os.getenv("BOTTLE_MODEL_PATH", "backend/app/assets/models/perfume_seg.onnx"))
+    MODEL_PATH = _abs(os.getenv("BOTTLE_MODEL_PATH", "app/assets/models/perfume_seg.onnx"))
 
     OCR_LANGS = os.getenv("OCR_LANGS", "eng,kor")
 

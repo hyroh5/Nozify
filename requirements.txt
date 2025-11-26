@@ -59,3 +59,7 @@ httpx==0.28.1
 
 pymysql
 ultralytics
+
+paddlepaddle==2.6.2
+paddleocr>=2.6
+opencv-python>=4.8
