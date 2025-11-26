@@ -1,21 +1,27 @@
 import 'dart:convert';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:provider/provider.dart';
+
 import '../widgets/topbar/appbar_ver2.dart';
 import '../widgets/bottom_navbar.dart';
 import '../widgets/custom_drawer.dart';
 import 'home_screen.dart';
 import 'storage/my_storage_main_screen.dart';
-import '../providers/storage_manager.dart';
-import '../providers/recent_perfume_provider.dart';
-import '../providers/auth_provider.dart'; // ✅ 추가됨
-import 'dart:math' as math;
+
+import '../services/api_client.dart';
+import '../providers/auth_provider.dart';
+import '../models/perfume_detail.dart';
 
 class PerfumeDetailScreen extends StatefulWidget {
+  final String perfumeId;
   final bool fromStorage;
-  const PerfumeDetailScreen({super.key, this.fromStorage = false});
+
+  const PerfumeDetailScreen({
+    super.key,
+    required this.perfumeId,
+    this.fromStorage = false,
+  });
 
   @override
   State<PerfumeDetailScreen> createState() => _PerfumeDetailScreenState();
@@ -23,47 +29,13 @@ class PerfumeDetailScreen extends StatefulWidget {
 
 class _PerfumeDetailScreenState extends State<PerfumeDetailScreen> {
   int _selectedIndex = 0;
-  bool isFavorite = false;
-  bool isPurchased = false;
 
-  // 더미 데이터
-  final Map<String, dynamic> perfume = {
-    "Name": "White Moss & Snowdrop Cologne",
-    "Brand": "Jo Malone London",
-    "ImageURL": "assets/images/snowdrop.png",
-    "Price": "85.00",
-    "Main Accords": [
-      "sweet",
-      "white floral",
-      "caramel",
-      "fruity",
-      "vanilla",
-      "citrus",
-      "woody",
-      "lactonic",
-      "amber",
-      "powdery"
-    ],
-    "Main Accords Percentage": {
-      "sweet": "Dominant",
-      "white floral": "Dominant",
-      "caramel": "Prominent",
-      "fruity": "Prominent",
-      "vanilla": "Prominent",
-      "citrus": "Prominent",
-      "woody": "Moderate",
-      "lactonic": "Moderate",
-      "amber": "Subtle",
-      "powdery": "Subtle"
-    },
-    "Notes": {
-      "Top": ["프티그레인", "클레멘타인"],
-      "Middle": ["네롤리", "스노드롭"],
-      "Base": ["모스", "통카빈", "앰버"]
-    },
-    "Longevity": "75.2%",
-    "Sillage": "66.0%",
-  };
+  PerfumeDetailModel? _perfume;
+  bool _loading = true;
+  String? _error;
+
+  bool _isFavorite = false;
+  bool _isPurchased = false;
 
   final Map<String, Color> accordColors = {
     'sweet': Color(0xFFF8BBD0),
@@ -91,215 +63,295 @@ class _PerfumeDetailScreenState extends State<PerfumeDetailScreen> {
   @override
   void initState() {
     super.initState();
-    _loadStatus();
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<RecentPerfumeProvider>().addPerfume({
-        'brand': perfume['Brand'],
-        'name': perfume['Name'],
-        'image': perfume['ImageURL'],
-      });
-    });
+    _loadData();
   }
 
-  Future<void> _loadStatus() async {
-    final auth = context.read<AuthProvider>();
-    final email = auth.user?.email ?? 'guest';
-    final name = perfume["Name"];
-    final fav = await StorageManager.contains(StorageManager.wishlistKey, email, name);
-    final buy = await StorageManager.contains(StorageManager.purchasedKey, email, name);
+  Future<void> _loadData() async {
     setState(() {
-      isFavorite = fav;
-      isPurchased = buy;
+      _loading = true;
+      _error = null;
     });
+
+    final auth = context.read<AuthProvider>();
+
+    try {
+      final res = await ApiClient.I.get(
+        "/catalog/perfumes/${widget.perfumeId}",
+        auth: true,
+      );
+
+      if (res.statusCode != 200) {
+        throw Exception("status ${res.statusCode}");
+      }
+
+      final Map<String, dynamic> json = jsonDecode(res.body);
+      final detail = PerfumeDetailModel.fromJson(json);
+
+      bool fav = false;
+      bool purchased = false;
+
+      if (auth.isLoggedIn) {
+        final wRes = await ApiClient.I.get("/user/wishlist", auth: true);
+        if (wRes.statusCode == 200) {
+          final list = jsonDecode(wRes.body) as List<dynamic>;
+          fav = list.any((item) {
+            final p = item["perfume"] as Map<String, dynamic>?;
+            return p != null && p["id"] == detail.id;
+          });
+        }
+
+        final pRes = await ApiClient.I.get("/user/purchase-history", auth: true);
+        if (pRes.statusCode == 200) {
+          final list = jsonDecode(pRes.body) as List<dynamic>;
+          purchased = list.any((item) {
+            final p = item["perfume"] as Map<String, dynamic>?;
+            return p != null && p["id"] == detail.id;
+          });
+        }
+      }
+
+      setState(() {
+        _perfume = detail;
+        _isFavorite = fav;
+        _isPurchased = purchased;
+        _loading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _error = "향수 정보를 불러오지 못했습니다.";
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _toggleWishlist() async {
+    final auth = context.read<AuthProvider>();
+    if (!auth.isLoggedIn) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("로그인 후 이용할 수 있습니다.")),
+      );
+      return;
+    }
+
+    if (_perfume == null) return;
+
+    try {
+      if (_isFavorite) {
+        final res = await ApiClient.I.delete(
+          "/user/wishlist/${_perfume!.id}",
+          auth: true,
+        );
+        if (res.statusCode == 200) {
+          setState(() => _isFavorite = false);
+        }
+      } else {
+        final res = await ApiClient.I.post(
+          "/user/wishlist?perfume_id=${_perfume!.id}",
+          auth: true,
+        );
+        if (res.statusCode == 200) {
+          setState(() => _isFavorite = true);
+        }
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _togglePurchased() async {
+    final auth = context.read<AuthProvider>();
+    if (!auth.isLoggedIn) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("로그인 후 이용할 수 있습니다.")),
+      );
+      return;
+    }
+
+    if (_perfume == null) return;
+
+    try {
+      if (_isPurchased) {
+        final res = await ApiClient.I.delete(
+          "/user/purchase-history/${_perfume!.id}",
+          auth: true,
+        );
+        if (res.statusCode == 200) {
+          setState(() => _isPurchased = false);
+        }
+      } else {
+        final res = await ApiClient.I.post(
+          "/user/purchase-history?perfume_id=${_perfume!.id}",
+          auth: true,
+        );
+        if (res.statusCode == 200) {
+          setState(() => _isPurchased = true);
+        }
+      }
+    } catch (_) {}
   }
 
   @override
   Widget build(BuildContext context) {
+    final perfume = _perfume;
+
     return Scaffold(
       appBar: AppBarVer2(
         onBack: () {
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(
-              builder: (_) =>
-              widget.fromStorage ? const MyStorageMainScreen() : const HomeScreen(),
+              builder: (_) => widget.fromStorage
+                  ? const MyStorageMainScreen()
+                  : const HomeScreen(),
             ),
           );
         },
       ),
       endDrawer: const CustomDrawer(),
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            const SizedBox(height: 12),
-            Container(
-              width: double.infinity,
-              height: 264,
-              color: Colors.grey[100],
-              alignment: Alignment.center,
-              child: Image.asset(
-                perfume["ImageURL"],
-                width: 264,
-                height: 264,
-                fit: BoxFit.fill,
-              ),
-            ),
-            const SizedBox(height: 32),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(perfume["Brand"],
-                      style: const TextStyle(
-                          fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey)),
-                  const SizedBox(height: 8),
-                  Text(perfume["Name"],
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 8),
-                  Text(
-                    '₩${(double.parse(perfume["Price"]) * 1300).toStringAsFixed(0)}',
-                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      // ❤️ 위시리스트 버튼
-                      IconButton(
-                        icon: Icon(
-                          isFavorite ? Icons.favorite : Icons.favorite_border_outlined,
-                          color: isFavorite ? Colors.redAccent : Colors.grey.shade700,
-                        ),
-                        onPressed: () async {
-                          final auth = context.read<AuthProvider>();
-                          if (!auth.isLoggedIn) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text("로그인 후 이용할 수 있습니다.")),
-                            );
-                            return;
-                          }
-
-                          final email = auth.user!.email;
-                          final name = perfume["Name"];
-                          if (isFavorite) {
-                            await StorageManager.removeItem(StorageManager.wishlistKey, email, name);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text("위시리스트에서 제거했어요")),
-                            );
-                          } else {
-                            await StorageManager.addItem(StorageManager.wishlistKey, email, {
-                              "brand": perfume["Brand"]!,
-                              "name": perfume["Name"]!,
-                              "image": perfume["ImageURL"]!,
-                            });
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text("위시리스트에 추가됐어요")),
-                            );
-                          }
-                          setState(() => isFavorite = !isFavorite);
-                        },
-                      ),
-
-                      // 👜 구매목록 버튼
-                      IconButton(
-                        icon: Icon(
-                          isPurchased ? Icons.add_circle : Icons.add_circle_outline,
-                          color: isPurchased ? Color(0xFF3C463A) : Colors.grey.shade700,
-                        ),
-                        onPressed: () async {
-                          final auth = context.read<AuthProvider>();
-                          if (!auth.isLoggedIn) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text("로그인 후 이용할 수 있습니다.")),
-                            );
-                            return;
-                          }
-
-                          final email = auth.user!.email;
-                          final name = perfume["Name"];
-                          if (isPurchased) {
-                            await StorageManager.removeItem(StorageManager.purchasedKey, email, name);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text("구매목록에서 제거했어요")),
-                            );
-                          } else {
-                            await StorageManager.addItem(StorageManager.purchasedKey, email, {
-                              "brand": perfume["Brand"]!,
-                              "name": perfume["Name"]!,
-                              "image": perfume["ImageURL"]!,
-                            });
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text("구매목록에 추가됐어요")),
-                            );
-                          }
-                          setState(() => isPurchased = !isPurchased);
-                        },
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-
-            // ✅ 네가 만든 탭 UI 100% 유지
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Column(
-                children: [
-                  const SizedBox(height: 32),
-                  _buildTabBar(),
-                  const SizedBox(height: 24),
-                  if (_selectedIndex == 0) _buildAccordsTab(),
-                  if (_selectedIndex == 1) _buildNotesTab(),
-                  if (_selectedIndex == 2) _buildSillageTab(),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
+      body: _loading
+          ? Center(child: CircularProgressIndicator())
+          : _error != null
+          ? Center(child: Text(_error!))
+          : perfume == null
+          ? Center(child: Text("향수 정보를 찾을 수 없습니다."))
+          : _buildDetail(perfume),
       bottomNavigationBar: BottomNavBar(
         currentIndex: 0,
         onTap: (index) {
-          setState(() {
-            if (index == 0) {
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (_) => const HomeScreen()),
-              );
-            } else if (index == 3) {
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (_) => const MyStorageMainScreen()),
-              );
-            }
-          });
+          if (index == 0) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (_) => const HomeScreen()),
+            );
+          } else if (index == 3) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (_) => const MyStorageMainScreen()),
+            );
+          }
         },
       ),
     );
   }
 
-Widget _buildTabBar() {
+  Widget _buildDetail(PerfumeDetailModel perfume) {
+    return SingleChildScrollView(
+      child: Column(
+        children: [
+          const SizedBox(height: 12),
+
+          Container(
+            width: double.infinity,
+            height: 264,
+            color: Colors.grey[100],
+            child: perfume.imageUrl != null
+                ? Image.network(
+              perfume.imageUrl!,
+              width: 264,
+              height: 264,
+              fit: BoxFit.fitHeight,
+              errorBuilder: (_, __, ___) {
+                return Image.asset(
+                  'assets/images/dummy.jpg',
+                  fit: BoxFit.fitHeight,
+                );
+              },
+            )
+                : Image.asset(
+              'assets/images/dummy.jpg',
+              fit: BoxFit.fitHeight,
+            ),
+          ),
+
+          const SizedBox(height: 32),
+
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  perfume.brandName ?? '',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+                SizedBox(height: 8),
+                Text(
+                  perfume.name,
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                SizedBox(height: 8),
+                if (perfume.price != null)
+                  Text(
+                    "₩${(perfume.price! * 1300).toStringAsFixed(0)}",
+                    style: TextStyle(fontSize: 15),
+                  ),
+                SizedBox(height: 12),
+
+                Row(
+                  children: [
+                    IconButton(
+                      icon: Icon(
+                        _isFavorite
+                            ? Icons.favorite
+                            : Icons.favorite_border_outlined,
+                        color:
+                        _isFavorite ? Colors.redAccent : Colors.grey[700],
+                      ),
+                      onPressed: _toggleWishlist,
+                    ),
+                    IconButton(
+                      icon: Icon(
+                        _isPurchased
+                            ? Icons.add_circle
+                            : Icons.add_circle_outline,
+                        color: _isPurchased
+                            ? Color(0xFF3C463A)
+                            : Colors.grey[700],
+                      ),
+                      onPressed: _togglePurchased,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Column(
+              children: [
+                SizedBox(height: 32),
+                _buildTabBar(),
+                SizedBox(height: 24),
+                if (_selectedIndex == 0) _buildAccordsTab(perfume),
+                if (_selectedIndex == 1) _buildNotesTab(perfume),
+                if (_selectedIndex == 2) _buildSillageTab(perfume),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTabBar() {
     const tabs = ["계열", "노트", "발향"];
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: List.generate(tabs.length, (i) {
-        final selected = i == _selectedIndex;
+        final selected = _selectedIndex == i;
         return GestureDetector(
           onTap: () => setState(() => _selectedIndex = i),
           child: Column(
-            mainAxisSize: MainAxisSize.min,
             children: [
               Text(
                 tabs[i],
                 style: TextStyle(
                   fontWeight: selected ? FontWeight.bold : FontWeight.normal,
-                  color: selected ? Colors.black : Colors.grey,
                   fontSize: 15,
+                  color: selected ? Colors.black : Colors.grey,
                 ),
               ),
-              const SizedBox(height: 4),
+              SizedBox(height: 4),
               if (selected)
                 Container(width: 24, height: 2, color: Colors.black),
             ],
@@ -309,89 +361,78 @@ Widget _buildTabBar() {
     );
   }
 
-  // ✅ 계열 탭 (도넛 그래프 + 세부 어코드)
-  Widget _buildAccordsTab() {
-    final accords = perfume["Main Accords"] as List;
-    final Map<String, String> percentages =
-    Map<String, String>.from(perfume["Main Accords Percentage"]);
+  Widget _buildAccordsTab(PerfumeDetailModel perfume) {
+    final accords = perfume.mainAccords ?? [];
+    final raw = perfume.mainAccordsPercentage ?? {};
 
-    // 🔹 계열 분류 기준
-    final Map<String, List<String>> accordGroups = {
-      "플로럴": ["floral", "rose", "jasmine", "violet", "iris", "peony", "lily"],
-      "프루티": ["fruit", "apple", "pear", "peach", "berry", "cherry", "mango"],
-      "시트러스": ["citrus", "lemon", "bergamot", "lime", "orange", "grapefruit"],
-      "우디": ["wood", "cedar", "sandalwood", "vetiver", "oak", "patchouli"],
-      "그린": ["green", "leaf", "grass", "tea", "herbal", "basil"],
-      "시프레": ["chypre", "moss", "oakmoss"],
-      "구르망": ["vanilla", "caramel", "chocolate", "coffee", "tonka"],
-      "아쿠아틱": ["aquatic", "marine", "sea", "water"],
-      "레더": ["leather", "suede", "tobacco"],
-      "머스크": ["musk", "musky", "powdery", "amber"],
+    if (accords.isEmpty) {
+      return Center(child: Text("계열 정보가 없습니다."));
+    }
+
+    final percentages = raw.map((k, v) => MapEntry(k, v.toString()));
+
+    final Map<String, List<String>> groups = {
+      "플로럴": ["floral", "rose", "jasmine", "violet"],
+      "프루티": ["fruit", "apple", "pear"],
+      "시트러스": ["citrus", "lemon", "bergamot"],
+      "우디": ["wood", "cedar", "sandalwood"],
+      "그린": ["green", "leaf", "grass"],
+      "구르망": ["vanilla", "caramel", "coffee"],
+      "아쿠아틱": ["aquatic", "marine"],
+      "레더": ["leather", "tobacco"],
+      "머스크": ["musk", "powdery"],
+      "기타": [],
     };
 
-    // 🔹 파스텔톤 색상
-    final Map<String, Color> pastelColors = {
-      "플로럴": const Color(0xFFFFC1CC),
-      "프루티": const Color(0xFFFFE4B5),
-      "시트러스": const Color(0xFFFFFFB3),
-      "우디": const Color(0xFFD7B899),
-      "그린": const Color(0xFFB4E197),
-      "시프레": const Color(0xFFC5E1A5),
-      "구르망": const Color(0xFFFFDAB9),
-      "아쿠아틱": const Color(0xFFB2EBF2),
-      "레더": const Color(0xFFE0C097),
-      "머스크": const Color(0xFFE6E6FA),
+    final Map<String, Color> colors = {
+      "플로럴": Color(0xFFFFC1CC),
+      "프루티": Color(0xFFFFE4B5),
+      "시트러스": Color(0xFFFFFFB3),
+      "우디": Color(0xFFD7B899),
+      "그린": Color(0xFFB4E197),
+      "구르망": Color(0xFFFFDAB9),
+      "아쿠아틱": Color(0xFFB2EBF2),
+      "레더": Color(0xFFE0C097),
+      "머스크": Color(0xFFE6E6FA),
       "기타": Colors.grey.shade300,
     };
 
-    // 🔹 계열별 카운트 계산
-    final Map<String, int> groupCount = {for (var k in pastelColors.keys) k: 0};
+    Map<String, int> count = {for (var k in colors.keys) k: 0};
 
-    for (final acc in accords) {
-      final lower = acc.toLowerCase();
+    for (var acc in accords) {
+      final l = acc.toLowerCase();
       bool matched = false;
-      for (final entry in accordGroups.entries) {
-        if (entry.value.any((kw) => lower.contains(kw))) {
-          groupCount[entry.key] = groupCount[entry.key]! + 1;
+
+      for (var entry in groups.entries) {
+        if (entry.value.any((x) => l.contains(x))) {
+          count[entry.key] = count[entry.key]! + 1;
           matched = true;
           break;
         }
       }
-      if (!matched) {
-        groupCount["기타"] = (groupCount["기타"] ?? 0) + 1;
-      }
+
+      if (!matched) count["기타"] = count["기타"]! + 1;
     }
 
-    final total = groupCount.values.fold<int>(0, (a, b) => a + b);
-    final groupList =
-    groupCount.keys.where((k) => groupCount[k]! > 0).toList();
+    final total = count.values.fold<int>(0, (a, b) => a + b).clamp(1, 999999);
+    final valid = count.keys.where((k) => count[k]! > 0).toList();
 
-    // 🔹 도넛 그래프 데이터
-    final List<PieChartSectionData> data = groupList.map((group) {
-      final percent = (groupCount[group]! / total) * 100;
+    final sections = valid.map((g) {
+      final pct = count[g]! / total * 100;
       return PieChartSectionData(
-        color: pastelColors[group],
-        value: groupCount[group]!.toDouble(),
+        color: colors[g],
+        value: count[g]!.toDouble(),
         radius: 60,
-        title: "$group\n${percent.toStringAsFixed(1)}%",
-        titleStyle: const TextStyle(
-          fontSize: 10,
-          fontWeight: FontWeight.bold,
-          color: Colors.black87,
-        ),
+        title: "$g\n${pct.toStringAsFixed(1)}%",
+        titleStyle: TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
       );
     }).toList();
 
-    // 🔹 UI
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          "계열별 분포",
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-        ),
-        const SizedBox(height: 12),
-
+        Text("계열별 분포", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        SizedBox(height: 12),
         Center(
           child: SizedBox(
             height: 260,
@@ -400,42 +441,35 @@ Widget _buildTabBar() {
               PieChartData(
                 startDegreeOffset: -90,
                 centerSpaceRadius: 50,
+                sections: sections,
                 sectionsSpace: 2,
-                sections: data,
-                pieTouchData: PieTouchData(enabled: false),
               ),
             ),
           ),
         ),
+        SizedBox(height: 24),
+        Text("세부 어코드", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        SizedBox(height: 12),
 
-        const SizedBox(height: 24),
-        const Text(
-          "세부 어코드",
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-        ),
-        const SizedBox(height: 12),
-
-        // 🟢 세부 어코드 막대그래프
         Container(
-          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
-          margin: const EdgeInsets.only(top: 8, bottom: 8),
+          padding: EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: Colors.white, // 흰색 배경
-            borderRadius: BorderRadius.circular(16), // 둥근 모서리
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.grey.shade200),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.08), // 약한 그림자
+                color: Colors.black.withOpacity(0.08),
                 blurRadius: 6,
-                offset: const Offset(0, 3),
-              ),
+                offset: Offset(0, 3),
+              )
             ],
-            border: Border.all(color: Colors.grey.shade200), // 외곽선
           ),
           child: Column(
             children: accords.map((acc) {
-              final color =
-                  accordColors[acc.toLowerCase()] ?? Colors.grey.shade300;
+              final color = accordColors[acc.toLowerCase()] ?? Colors.grey.shade300;
               final level = percentages[acc] ?? 'Moderate';
+
               final percent = switch (level) {
                 "Dominant" => 90,
                 "Prominent" => 70,
@@ -443,21 +477,14 @@ Widget _buildTabBar() {
                 "Subtle" => 30,
                 _ => 50
               };
+
               return Padding(
                 padding: const EdgeInsets.symmetric(vertical: 5),
                 child: Row(
                   children: [
                     Container(
                       width: 70,
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        acc,
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w500,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                      child: Text(acc, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11)),
                     ),
                     Expanded(
                       child: Stack(
@@ -471,137 +498,116 @@ Widget _buildTabBar() {
                           ),
                           Container(
                             height: 14,
-                            width:
-                            MediaQuery.of(context).size.width * percent / 156,
+                            width: MediaQuery.of(context).size.width * percent / 156,
                             decoration: BoxDecoration(
                               color: color,
                               borderRadius: BorderRadius.circular(6),
                             ),
-                          ),
+                          )
                         ],
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    Text(
-                      "$percent%",
-                      style: const TextStyle(fontSize: 11, color: Colors.grey),
-                    ),
+                    SizedBox(width: 8),
+                    Text("$percent%", style: TextStyle(fontSize: 11)),
                   ],
                 ),
               );
             }).toList(),
           ),
         ),
-        const SizedBox(height: 20),
       ],
     );
   }
 
-  // -------------------------------
-  // 🔹 노트 탭
-  // -------------------------------
-  Widget _buildNotesTab() {
-    final notes = perfume["Notes"] as Map<String, dynamic>;
+  Widget _buildNotesTab(PerfumeDetailModel p) {
+    final top = p.topNotes ?? [];
+    final mid = p.middleNotes ?? [];
+    final base = p.baseNotes ?? [];
 
-    // 🟢 단계별 색상 정의
-    final Map<String, Color> noteColors = {
-      "Top": const Color(0xFFE9EAE5),
-      "Middle": const Color(0xFFD1D4CB),
-      "Base": const Color(0xFFACAEA8),
+    if (top.isEmpty && mid.isEmpty && base.isEmpty) {
+      return Center(child: Text("노트 정보가 없습니다."));
+    }
+
+    final notes = {
+      "Top": top,
+      "Middle": mid,
+      "Base": base,
     };
 
-    // 🟢 한글 라벨 매핑
-    final Map<String, String> noteLabels = {
-      "Top": "탑 노트",
-      "Middle": "미들 노트",
-      "Base": "베이스 노트",
+    final colors = {
+      "Top": Color(0xFFE9EAE5),
+      "Middle": Color(0xFFD1D4CB),
+      "Base": Color(0xFFACAEA8),
     };
 
-    Widget buildNoteRow(String key, List<dynamic> items) {
-      final circleColor = noteColors[key] ?? Colors.grey.shade400;
-      final label = noteLabels[key] ?? key;
+    Widget row(String key, List<dynamic> items) {
+      if (items.isEmpty) return SizedBox.shrink();
+      final color = colors[key] ?? Colors.grey.shade300;
+      final label = switch (key) {
+        "Top" => "탑 노트",
+        "Middle" => "미들 노트",
+        "Base" => "베이스 노트",
+        _ => key,
+      };
 
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            label, // ✅ 한글 라벨 사용
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-          ),
-          const SizedBox(height: 8),
+          Text(label, style: TextStyle(fontWeight: FontWeight.bold)),
+          SizedBox(height: 8),
           Container(
-            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+            padding: EdgeInsets.symmetric(vertical: 12),
             decoration: BoxDecoration(
               color: Colors.white,
               border: Border.all(color: Colors.grey.shade300),
               borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ],
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: items.map((n) {
+                final text = n["name"] ?? "";
                 return Container(
                   width: 68,
                   height: 68,
                   alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: circleColor,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Text(
-                    n is Map ? (n["name"] ?? '') : n.toString(),
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
+                  decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+                  child: Text(text, textAlign: TextAlign.center, style: TextStyle(fontSize: 10)),
                 );
               }).toList(),
             ),
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: 16),
         ],
       );
     }
 
     return Column(
       children: [
-        buildNoteRow("Top", notes["Top"]),
-        buildNoteRow("Middle", notes["Middle"]),
-        buildNoteRow("Base", notes["Base"]),
+        row("Top", notes["Top"]!),
+        row("Middle", notes["Middle"]!),
+        row("Base", notes["Base"]!),
       ],
     );
   }
 
-  // -------------------------------
-  // 🔹 발향 탭
-  // -------------------------------
-  Widget _buildSillageTab() {
-    final longevity =
-        double.parse(perfume["Longevity"].replaceAll('%', '')) / 100;
-    final sillage =
-        double.parse(perfume["Sillage"].replaceAll('%', '')) / 100;
+  Widget _buildSillageTab(PerfumeDetailModel p) {
+    final lonRaw = p.longevity ?? -1;
+    final silRaw = p.sillage ?? -1;
 
-    Widget buildDonut(String title, double value) {
+    if (lonRaw < 0 && silRaw < 0) {
+      return Center(child: Text("발향 정보가 없습니다."));
+    }
+
+    final lon = (lonRaw / 100).clamp(0.0, 1.0);
+    final sil = (silRaw / 100).clamp(0.0, 1.0);
+
+    Widget donut(String label, double value, double raw) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            title,
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-          ),
-          const SizedBox(height: 8),
-
-          // 박스
+          Text(label, style: TextStyle(fontWeight: FontWeight.bold)),
+          SizedBox(height: 8),
           Container(
-            width: double.infinity,
             height: 180,
             decoration: BoxDecoration(
               border: Border.all(color: Colors.grey.shade300),
@@ -609,50 +615,33 @@ Widget _buildTabBar() {
             ),
             child: Center(
               child: SizedBox(
-                width: 120,   // 👈 원 전체 지름
-                height: 120,  // 👈 원 전체 지름
+                width: 120,
+                height: 120,
                 child: Stack(
                   alignment: Alignment.center,
                   children: [
-                    // ❗❗ 바로 이놈을 한 번 더 싸줘야 한다
-                    SizedBox(
-                      width: 180,
-                      height: 180,
-                      child: CircularProgressIndicator(
-                        value: value,
-                        strokeWidth: 12, // 두께
-                        backgroundColor: Colors.grey.shade200,
-                        valueColor: const AlwaysStoppedAnimation(
-                          Color(0xFFD1D4CB),
-                        ),
-                      ),
+                    CircularProgressIndicator(
+                      value: value,
+                      strokeWidth: 12,
+                      backgroundColor: Colors.grey.shade200,
+                      valueColor: AlwaysStoppedAnimation(Color(0xFFD1D4CB)),
                     ),
-                    Text(
-                      "${(value * 100).toStringAsFixed(1)}%",
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.grey,
-                      ),
-                    ),
+                    Text("${raw.toStringAsFixed(1)}%", style: TextStyle(fontSize: 14)),
                   ],
                 ),
               ),
             ),
           ),
-
-          const SizedBox(height: 20),
+          SizedBox(height: 20),
         ],
       );
     }
 
     return Column(
       children: [
-        buildDonut("지속력", longevity),
-        buildDonut("확산력", sillage),
+        donut("지속력", lon, lonRaw),
+        donut("확산력", sil, silRaw),
       ],
     );
   }
-
 }
-

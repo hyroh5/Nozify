@@ -5,9 +5,14 @@ import 'package:carousel_slider/carousel_slider.dart';
 
 import '../../providers/auth_provider.dart';
 import '../../providers/pbti_provider.dart';
+
+import '../../models/pbti_history.dart';
+import '../../models/perfume_simple.dart';
+
 import '../../widgets/topbar/appbar_ver2.dart';
 import '../../widgets/bottom_navbar.dart';
 import '../../widgets/custom_drawer.dart';
+
 import '../home_screen.dart';
 import 'pbti_intro_screen.dart';
 import '../perfume_detail_screen.dart';
@@ -23,31 +28,60 @@ class _PbtiMainScreenState extends State<PbtiMainScreen> {
   int _currentPage = 0;
   int _selectedIndex = 2;
 
-  /// 서버에서 받아온 PBTI 코드 리스트 (최신순)
-  List<String> pbtiResults = [];
+  /// 히스토리
+  List<PbtiHistoryItem> pbtiResults = [];
+
+  /// 추천 향수
+  List<PerfumeSimple> recommendations = [];
+  bool isLoadingRecommendations = true;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final auth = context.read<AuthProvider>();
-      await context.read<PbtiProvider>().loadResults(auth);
+      final pbtiProvider = context.read<PbtiProvider>();
 
-      final providerResults = context.read<PbtiProvider>().results;
-      setState(() => pbtiResults = providerResults);
+      // 1) 히스토리 불러오기
+      await pbtiProvider.loadResults(auth);
+      setState(() => pbtiResults = pbtiProvider.results);
+
+      // 2) 추천 불러오기 (기본 추천)
+      try {
+        final rec = await pbtiProvider.fetchRecommendations();
+        setState(() {
+          recommendations = rec;
+          isLoadingRecommendations = false;
+        });
+      } catch (_) {
+        setState(() => isLoadingRecommendations = false);
+      }
     });
   }
 
-  /// 삭제는 일단 클라이언트에서만 숨기는 용도로 처리
-  Future<void> _deleteType(int index) async {
-    setState(() {
-      pbtiResults.removeAt(index);
-    });
+  // ------------------------------
+  // 삭제
+  // ------------------------------
+  Future<void> _deleteType(PbtiHistoryItem item) async {
+    final pbti = context.read<PbtiProvider>();
+
+    try {
+      await pbti.deleteHistory(item.id);
+
+      setState(() {
+        pbtiResults.removeWhere((e) => e.id == item.id);
+      });
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("삭제 실패: $e")),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final totalCards = pbtiResults.length + 1;
+    final isLoggedIn = context.watch<AuthProvider>().isLoggedIn;
 
     return Scaffold(
       appBar: AppBarVer2(
@@ -68,7 +102,7 @@ class _PbtiMainScreenState extends State<PbtiMainScreen> {
             children: [
               const SizedBox(height: 20),
 
-              // 🔹 캐릭터 캐러셀
+              // 🔹 캐러셀
               CarouselSlider.builder(
                 itemCount: totalCards,
                 options: CarouselOptions(
@@ -76,11 +110,10 @@ class _PbtiMainScreenState extends State<PbtiMainScreen> {
                   enlargeCenterPage: true,
                   viewportFraction: 0.38,
                   enableInfiniteScroll: false,
-                  onPageChanged: (index, reason) {
-                    setState(() => _currentPage = index);
-                  },
+                  onPageChanged: (index, _) =>
+                      setState(() => _currentPage = index),
                 ),
-                itemBuilder: (context, index, realIdx) {
+                itemBuilder: (context, index, _) {
                   final bool isAddCard = index == pbtiResults.length;
                   final bool isCenter = _currentPage == index;
 
@@ -92,83 +125,24 @@ class _PbtiMainScreenState extends State<PbtiMainScreen> {
                       child: Stack(
                         fit: StackFit.expand,
                         children: [
+                          // 기존 카드
                           if (!isAddCard)
-                            Container(
-                              color: Colors.white,
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  ImageFiltered(
-                                    imageFilter: ImageFilter.blur(
-                                      sigmaX: isCenter ? 0 : 5,
-                                      sigmaY: isCenter ? 0 : 5,
-                                    ),
-                                    child: Image.asset(
-                                      getPbtiImage(pbtiResults[index]),
-                                      height: isCenter ? 150 : 120,
-                                      fit: BoxFit.contain,
-                                    ),
-                                  ),
-                                  if (isCenter) ...[
-                                    const SizedBox(height: 16),
-                                    Text(
-                                      pbtiResults[index],
-                                      style: const TextStyle(
-                                        fontSize: 36,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                    const Text(
-                                      "당신의 향수 성향 코드",
-                                      style: TextStyle(color: Colors.grey),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            )
+                            _buildHistoryCard(pbtiResults[index], isCenter)
+
+                          // 새 카드
                           else
-                            GestureDetector(
-                              onTap: () => Navigator.pushReplacement(
-                                context,
-                                MaterialPageRoute(
-                                    builder: (_) =>
-                                    const PBTIIntroScreen()),
-                              ),
-                              child: Container(
-                                color: Colors.white,
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Image.asset(
-                                      "assets/images/PBTI/newPBTI.png",
-                                      height: isCenter ? 150 : 120,
-                                      fit: BoxFit.contain,
-                                    ),
-                                    if (isCenter) ...[
-                                      const SizedBox(height: 16),
-                                      const Text(
-                                        "테스트하러 가기",
-                                        style: TextStyle(
-                                          fontSize: 20,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.black87,
-                                        ),
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                              ),
-                            ),
+                            _buildAddCard(isCenter, isLoggedIn),
+
+                          // 삭제 버튼
                           if (!isAddCard && isCenter)
                             Positioned(
                               top: 8,
                               right: 12,
                               child: IconButton(
-                                icon: const Icon(
-                                  Icons.close,
-                                  color: Colors.black54,
-                                ),
-                                onPressed: () => _deleteType(index),
+                                icon: const Icon(Icons.close,
+                                    color: Colors.black54),
+                                onPressed: () =>
+                                    _deleteType(pbtiResults[index]),
                               ),
                             ),
                         ],
@@ -180,49 +154,8 @@ class _PbtiMainScreenState extends State<PbtiMainScreen> {
 
               const SizedBox(height: 40),
 
-              // 🔹 내 취향 반영 추천 향수 (지금은 더미 데이터)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      "내 취향을 반영한 추천 향수",
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    const Divider(color: Colors.black12, thickness: 1),
-
-                    SizedBox(
-                      height: 180,
-                      child: ListView(
-                        scrollDirection: Axis.horizontal,
-                        children: [
-                          _buildPerfumeCard({
-                            'brand': '딥디크',
-                            'name': '오에도',
-                            'image': 'assets/images/perfume001.png'
-                          }),
-                          _buildPerfumeCard({
-                            'brand': '디올',
-                            'name': '소바쥬 엘릭서',
-                            'image': 'assets/images/perfume002.png'
-                          }),
-                          _buildPerfumeCard({
-                            'brand': '입생로랑',
-                            'name': '라 뉘드롬므',
-                            'image': 'assets/images/perfume003.png'
-                          }),
-                        ],
-                      ),
-                    ),
-                    const Divider(color: Colors.black12, thickness: 1),
-                  ],
-                ),
-              ),
+              // 🔹 추천 향수 리스트
+              _buildRecommendationSection(),
             ],
           ),
         ),
@@ -243,13 +176,149 @@ class _PbtiMainScreenState extends State<PbtiMainScreen> {
     );
   }
 
-  Widget _buildPerfumeCard(Map<String, String> perfume) {
+  // ----------------------------------------------------
+  // 히스토리 카드
+  // ----------------------------------------------------
+  Widget _buildHistoryCard(PbtiHistoryItem item, bool isCenter) {
+    return Container(
+      color: Colors.white,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          ImageFiltered(
+            imageFilter: ImageFilter.blur(
+              sigmaX: isCenter ? 0 : 5,
+              sigmaY: isCenter ? 0 : 5,
+            ),
+            child: Image.asset(
+              getPbtiImage(item.finalType),
+              height: isCenter ? 150 : 120,
+              fit: BoxFit.contain,
+            ),
+          ),
+          if (isCenter) ...[
+            const SizedBox(height: 16),
+            Text(
+              item.finalType,
+              style: const TextStyle(
+                  fontSize: 36, fontWeight: FontWeight.bold),
+            ),
+            const Text("당신의 향수 성향 코드",
+                style: TextStyle(color: Colors.grey)),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // ----------------------------------------------------
+  // 새 카드
+  // ----------------------------------------------------
+  Widget _buildAddCard(bool isCenter, bool isLoggedIn) {
+    return GestureDetector(
+      onTap: () {
+        if (!isLoggedIn) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("로그인 후 이용할 수 있습니다.")),
+          );
+          return;
+        }
+
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const PBTIIntroScreen()),
+        );
+      },
+      child: Container(
+        color: Colors.white,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Image.asset(
+              "assets/images/PBTI/newPBTI.png",
+              height: isCenter ? 150 : 120,
+              fit: BoxFit.contain,
+            ),
+            if (isCenter) ...[
+              const SizedBox(height: 16),
+              const Text(
+                "테스트하러 가기",
+                style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87),
+              ),
+            ]
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ----------------------------------------------------
+  // 추천 향수 섹션
+  // ----------------------------------------------------
+  Widget _buildRecommendationSection() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            "내 취향을 반영한 추천 향수",
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 12),
+          const Divider(color: Colors.black12, thickness: 1),
+
+          SizedBox(
+            height: 180,
+            child: Builder(
+              builder: (_) {
+                if (isLoadingRecommendations) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                if (recommendations.isEmpty) {
+                  return const Center(
+                    child: Text(
+                      "추천 결과가 없습니다.",
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                  );
+                }
+
+                return ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: recommendations.length,
+                  itemBuilder: (_, index) {
+                    final item = recommendations[index];
+                    return _buildPerfumeCard(item);
+                  },
+                );
+              },
+            ),
+          ),
+
+          const Divider(color: Colors.black12, thickness: 1),
+        ],
+      ),
+    );
+  }
+
+  // ----------------------------------------------------
+  // 향수 카드 공용 컴포넌트
+  // ----------------------------------------------------
+  Widget _buildPerfumeCard(PerfumeSimple item) {
     return GestureDetector(
       onTap: () {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => const PerfumeDetailScreen(fromStorage: false),
+            builder: (_) => PerfumeDetailScreen(
+              perfumeId: item.id,
+              fromStorage: false,
+            ),
           ),
         );
       },
@@ -257,35 +326,37 @@ class _PbtiMainScreenState extends State<PbtiMainScreen> {
         width: 150,
         margin: const EdgeInsets.only(right: 8),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.start,
           children: [
             const SizedBox(height: 8),
             ClipRRect(
               borderRadius: BorderRadius.circular(12),
-              child: Image.asset(
-                perfume['image']!,
-                height: 120,
-                width: 100,
-                fit: BoxFit.fill,
+              child: Image.network(
+                item.imageUrl ?? '',
+                height: 108,
+                width: 90,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) =>
+                    Image.asset('assets/images/dummy.jpg',
+                        height: 108,
+                        width: 90,
+                        fit: BoxFit.cover),
               ),
             ),
             const SizedBox(height: 8),
             Text(
-              perfume['brand'] ?? '',
-              style: const TextStyle(color: Colors.grey, fontSize: 10),
-              maxLines: 1,
+              item.brandName,
+              style: const TextStyle(
+                  color: Colors.grey, fontSize: 10),
               overflow: TextOverflow.ellipsis,
+              maxLines: 1,
             ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: Text(
-                perfume['name'] ?? '',
-                style: const TextStyle(
-                    fontWeight: FontWeight.w600, fontSize: 11),
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
+            Text(
+              item.name,
+              style: const TextStyle(
+                  fontWeight: FontWeight.w600, fontSize: 11),
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              maxLines: 1,
             ),
             const SizedBox(height: 8),
           ],
@@ -294,44 +365,29 @@ class _PbtiMainScreenState extends State<PbtiMainScreen> {
     );
   }
 
-  /// PBTI 코드 → 캐릭터 이미지 매핑
+  // ----------------------------------------------------
+  // PBti 이미지 매핑
+  // ----------------------------------------------------
   String getPbtiImage(String code) {
     const base = 'assets/images/PBTI';
     switch (code) {
-      case 'FHPM':
-        return '$base/FHPM.png';
-      case 'FHPN':
-        return '$base/FHPN.png';
-      case 'FHSM':
-        return '$base/FHSM.png';
-      case 'FHSN':
-        return '$base/FHSN.png';
-      case 'FLPM':
-        return '$base/FLPM.png';
-      case 'FLPN':
-        return '$base/FLPN.png';
-      case 'FLSM':
-        return '$base/FLSM.png';
-      case 'FLSN':
-        return '$base/FLSN.png';
-      case 'WHPM':
-        return '$base/WHPM.png';
-      case 'WHPN':
-        return '$base/WHPN.png';
-      case 'WHSM':
-        return '$base/WHSM.png';
-      case 'WHSN':
-        return '$base/WHSN.png';
-      case 'WLPM':
-        return '$base/WLPM.png';
-      case 'WLPN':
-        return '$base/WLPN.png';
-      case 'WLSM':
-        return '$base/WLSM.png';
-      case 'WLSN':
-        return '$base/WLSN.png';
-      default:
-        return '$base/FLSN.png';
+      case 'FHPM': return '$base/FHPM.png';
+      case 'FHPN': return '$base/FHPN.png';
+      case 'FHSM': return '$base/FHSM.png';
+      case 'FHSN': return '$base/FHSN.png';
+      case 'FLPM': return '$base/FLPM.png';
+      case 'FLPN': return '$base/FLPN.png';
+      case 'FLSM': return '$base/FLSM.png';
+      case 'FLSN': return '$base/FLSN.png';
+      case 'WHPM': return '$base/WHPM.png';
+      case 'WHPN': return '$base/WHPN.png';
+      case 'WHSM': return '$base/WHSM.png';
+      case 'WHSN': return '$base/WHSN.png';
+      case 'WLPM': return '$base/WLPM.png';
+      case 'WLPN': return '$base/WLPN.png';
+      case 'WLSM': return '$base/WLSM.png';
+      case 'WLSN': return '$base/WLSN.png';
+      default: return '$base/FLSN.png';
     }
   }
 }
