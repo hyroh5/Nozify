@@ -1,6 +1,7 @@
+// pbti_result_screen.dart
 import 'package:flutter/material.dart';
 
-import '../../providers/pbti_provider.dart';
+import '../../models/pbti_result.dart';
 import '../../widgets/topbar/appbar_ver2.dart';
 import '../../widgets/bottom_navbar.dart';
 import '../../widgets/custom_drawer.dart';

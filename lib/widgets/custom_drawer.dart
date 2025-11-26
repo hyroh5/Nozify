@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../providers/auth_provider.dart';
 import '../screens/login_screen.dart';
 import '../screens/my_info_screen.dart';
 import '../screens/recent_perfume_screen.dart';
+import '../screens/home_screen.dart';
 
 class CustomDrawer extends StatelessWidget {
   const CustomDrawer({super.key});
@@ -37,7 +39,9 @@ class CustomDrawer extends StatelessWidget {
                               ? '${user?.name ?? '사용자'}님'
                               : '비회원으로 이용 중',
                           style: const TextStyle(
-                              fontSize: 18, fontWeight: FontWeight.bold),
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                         const SizedBox(height: 4),
                         Text(
@@ -45,7 +49,9 @@ class CustomDrawer extends StatelessWidget {
                               ? user?.email ?? ''
                               : '로그인 시 더 많은 기능을 이용할 수 있습니다.',
                           style: const TextStyle(
-                              fontSize: 11, color: Colors.grey),
+                            fontSize: 11,
+                            color: Colors.grey,
+                          ),
                         ),
                       ],
                     ),
@@ -62,7 +68,6 @@ class CustomDrawer extends StatelessWidget {
               Expanded(
                 child: ListView(
                   children: [
-                    // ✅ 로그인된 경우만 메뉴 표시
                     if (isLoggedIn) ...[
                       ListTile(
                         leading: const Icon(Icons.person_outline),
@@ -94,16 +99,26 @@ class CustomDrawer extends StatelessWidget {
                         leading: const Icon(Icons.logout),
                         title: const Text('로그아웃'),
                         onTap: () async {
+                          // 로그아웃 처리
                           await context.read<AuthProvider>().signOut();
+
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('로그아웃 되었습니다.')),
+                            const SnackBar(
+                              content: Text('로그아웃 되었습니다.'),
+                            ),
                           );
-                          Navigator.pop(context);
+
+                          // Drawer 닫기 전에 전체 앱 초기화
+                          Navigator.pushAndRemoveUntil(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) => const HomeScreen()),
+                                (route) => false,
+                          );
                         },
                       ),
                     ],
 
-                    // ❌ 로그인 안 되어 있으면 오직 “로그인하기”만 표시
                     if (!isLoggedIn)
                       ListTile(
                         leading: const Icon(Icons.login),

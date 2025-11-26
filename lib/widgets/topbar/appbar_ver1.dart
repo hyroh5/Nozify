@@ -5,7 +5,7 @@ class AppBarVer1 extends StatefulWidget implements PreferredSizeWidget {
   const AppBarVer1({super.key});
 
   @override
-  Size get preferredSize => const Size.fromHeight(120);
+  Size get preferredSize => const Size.fromHeight(110); // 약간 줄임
 
   @override
   State<AppBarVer1> createState() => _AppBarVer1State();
@@ -16,12 +16,11 @@ class _AppBarVer1State extends State<AppBarVer1> {
 
   void _onSearch(String query) {
     if (query.trim().isEmpty) return;
-    // TODO: 나중에 SearchResultScreen으로 이동
   }
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea( // ✅ 추가
+    return SafeArea(
       child: Container(
         decoration: BoxDecoration(
           color: Colors.white,
@@ -36,10 +35,11 @@ class _AppBarVer1State extends State<AppBarVer1> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // 🔹 상단 로고 + 메뉴
+            // 🔹 로고 + 메뉴
             Container(
               color: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              // ↑ 기존 10 → 6 으로 축소
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -62,20 +62,25 @@ class _AppBarVer1State extends State<AppBarVer1> {
             // 🔹 검색창
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
-              child: TextField(
-                controller: searchController,
-                onSubmitted: _onSearch,
-                decoration: InputDecoration(
-                  prefixIcon: const Icon(Icons.search, color: Colors.grey),
-                  hintText: '향수 이름, 브랜드 검색',
-                  hintStyle: const TextStyle(color: Colors.grey),
-                  contentPadding:
-                  const EdgeInsets.symmetric(vertical: 0, horizontal: 12),
-                  filled: true,
-                  fillColor: Colors.grey[100],
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide.none,
+              child: Transform.translate(
+                offset: const Offset(0, -6), // 🔼 검색창을 위로 6px 올림 (음수 padding X)
+                child: TextField(
+                  controller: searchController,
+                  onSubmitted: _onSearch,
+                  decoration: InputDecoration(
+                    prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                    hintText: '향수 이름, 브랜드 검색',
+                    hintStyle: const TextStyle(color: Colors.grey),
+                    filled: true,
+                    fillColor: Colors.grey[100],
+                    contentPadding: const EdgeInsets.symmetric(
+                      vertical: 0,
+                      horizontal: 12,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide.none,
+                    ),
                   ),
                 ),
               ),

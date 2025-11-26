@@ -20,16 +20,19 @@ class _ResultScreenState extends State<ResultScreen> {
 
   final List<Map<String, String>> dummyResults = [
     {
+      'id': 'dummy001',
       "brand": "브랜드 001",
       "name": "향수 이름 001",
       "image": "assets/images/dummy.jpg"
     },
     {
+      'id': 'dummy002',
       "brand": "브랜드 002",
       "name": "향수 이름 002",
       "image": "assets/images/dummy.jpg"
     },
     {
+      'id': 'dummy003',
       "brand": "브랜드 003",
       "name": "향수 이름 003",
       "image": "assets/images/dummy.jpg"
@@ -72,10 +75,11 @@ class _ResultScreenState extends State<ResultScreen> {
                 onPageChanged: (i) => setState(() => _currentPage = i),
                 itemBuilder: (context, index) {
                   final perfume = dummyResults[index];
-                  return Center( // ← 중앙정렬 추가
+
+                  return Center(
                     child: SizedBox(
-                      width: 280, // 카드 너비
-                      height: 520, // 카드 높이
+                      width: 280,
+                      height: 520,
                       child: Container(
                         decoration: BoxDecoration(
                           color: Colors.white,
@@ -112,12 +116,17 @@ class _ResultScreenState extends State<ResultScreen> {
                               ),
                             ),
                             const SizedBox(height: 60),
+
+                            // 🔥 수정된 부분: perfumeId 전달
                             ElevatedButton(
                               onPressed: () {
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
-                                    builder: (_) => const PerfumeDetailScreen(),
+                                    builder: (_) => PerfumeDetailScreen(
+                                      perfumeId: perfume['id']!,
+                                      fromStorage: false,
+                                    ),
                                   ),
                                 );
                               },
@@ -127,15 +136,17 @@ class _ResultScreenState extends State<ResultScreen> {
                                   borderRadius: BorderRadius.circular(30),
                                 ),
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 80, vertical: 12,
+                                  horizontal: 80,
+                                  vertical: 12,
+                                ),
                               ),
-                            ),
                               child: const Text(
                                 '제품 보기',
                                 style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w500),
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                ),
                               ),
                             ),
                           ],
@@ -147,8 +158,9 @@ class _ResultScreenState extends State<ResultScreen> {
               ),
             ),
 
-            // ⭕ 페이지 인디케이터
             const SizedBox(height: 16),
+
+            // ⭕ 페이지 인디케이터
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: List.generate(
@@ -161,7 +173,7 @@ class _ResultScreenState extends State<ResultScreen> {
                   decoration: BoxDecoration(
                     color: _currentPage == i
                         ? Colors.white
-                        : Color(0xFFFFFFFF).withOpacity(0.4),
+                        : const Color(0xFFFFFFFF).withOpacity(0.4),
                     borderRadius: BorderRadius.circular(4),
                   ),
                 ),
