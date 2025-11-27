@@ -41,8 +41,7 @@ if DATABASE_URL.startswith("mysql://"):
 Base = declarative_base()
 
 class Perfume(Base):
-    # !!! 이 부분을 'perfume'으로 수정했습니다. !!!
-    __tablename__ = 'perfume' 
+    __tablename__ = 'perfume'
     
     id = Column(Integer, primary_key=True)
     # DB에 저장된 원본 데이터 컬럼 (JSON 문자열 가정)

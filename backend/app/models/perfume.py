@@ -20,10 +20,10 @@ class Perfume(Base):
     name = Column(String(255), nullable=False)
     brand_name = Column(String(100), nullable=True) 
     currency = Column(String(3), default="KRW", nullable=True)
-    image_url = Column(String(255), nullable=True) 
+    image_url = Column(String(255), nullable=True)
     image_fallbacks = Column(JSON, nullable=True)
-    gender = Column(String(20), nullable=True) # MUL
-    fragella_id = Column(String(100), unique=True, nullable=True) # UNI
+    gender = Column(String(20), nullable=True)
+    fragella_id = Column(String(100), unique=True, nullable=True)
     purchase_url = Column(String(1024), nullable=True)
     source_url = Column(String(255), nullable=True)
     concentration = Column(String(50), nullable=True)

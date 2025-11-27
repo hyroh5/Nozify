@@ -49,11 +49,13 @@ def _load_from_db() -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
             name = p.name or ""
 
             aliases = [name]
-            # 필요하면 brand_name, concentration, fragella_id 같은 것도 alias에 추가 가능
-            if p.brand_name:
+            if getattr(p, "brand_name", None):
                 aliases.append(p.brand_name)
-            if p.concentration:
+            if getattr(p, "concentration", None):
                 aliases.append(p.concentration)
+
+            # 1) 이미지 URL 가져오기 (컬럼명이 다르면 여기만 바꾸면 됨)
+            image_url = getattr(p, "image_url", None)
 
             product_dicts.append(
                 {
@@ -61,8 +63,10 @@ def _load_from_db() -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
                     "brand_id": bid,
                     "name": name,
                     "aliases": aliases,
+                    "image_url": image_url,   # ← 추가
                 }
             )
+
 
         print(f"[LOG][MATCH][INIT] loaded brands={len(brand_dicts)}, perfumes={len(product_dicts)}")
         return brand_dicts, product_dicts
@@ -219,6 +223,7 @@ def get_match(texts: List[Dict[str, Any]], user_query: str = "") -> Dict[str, An
         prods = match_product(b["id"], ocr_tokens, user_tokens)
         for p, pscore in prods:
             final_score = 0.3 * bscore + 0.6 * pscore + 0.1 * (1.0 if user_tokens else 0.0)
+
             prod_candidates.append(
                 {
                     "brand": b["name"],
@@ -226,8 +231,11 @@ def get_match(texts: List[Dict[str, Any]], user_query: str = "") -> Dict[str, An
                     "product": p["name"],
                     "product_id": p["id"],
                     "score": round(min(final_score, 1.0), 3),
+                    # 2) 여기서 image_url을 그대로 흘려보냄
+                    "image_url": p.get("image_url"),
                 }
             )
+
 
     prod_candidates.sort(key=lambda x: (-x["score"], x["product"]))
     final = (
