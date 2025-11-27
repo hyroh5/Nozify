@@ -53,4 +53,4 @@ email-validator==2.2.0
 
 paddleocr==2.9.1
 opencv-python>=4.8
-paddlepaddle==3.2.2
+paddlepaddle==2.6.2
