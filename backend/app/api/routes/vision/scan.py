@@ -185,8 +185,11 @@ async def scan(
         )
 
     print("[SCAN] Received image:", image.filename, image.content_type)
-    print("[SCAN] Image length (bytes):", len(content))
-    print("[SCAN] Trying to decode image…")
+
+    content_preview = await image.read()
+    print("[SCAN] Image length (bytes):", len(content_preview))
+
+    image.file.seek(0)
 
     # ---------- 입력 검증 ----------
     if image.content_type not in ("image/jpeg", "image/png"):
