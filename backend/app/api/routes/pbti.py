@@ -546,16 +546,17 @@ def delete_single_pbti_result(
     """
     특정 PBTI 결과(result_id) 하나만 삭제하는 API
     - 본인 소유인지 체크
+    - 만약 삭제 대상이 active였다면, 남아 있는 결과 중 가장 최신 것을 active로 승격
     - 삭제 후 204 반환
     """
     current_user_id_bytes = current_user.id
 
-    # 해당 result가 현재 유저 소유인지 확인
+    # 1) 해당 result가 현재 유저 소유인지 확인
     result = (
         db.query(PBTIResult)
         .filter(
             PBTIResult.id == result_id,
-            PBTIResult.user_id == current_user_id_bytes
+            PBTIResult.user_id == current_user_id_bytes,
         )
         .first()
     )
@@ -563,8 +564,22 @@ def delete_single_pbti_result(
     if not result:
         raise HTTPException(status_code=404, detail="해당 PBTI 결과를 찾을 수 없습니다.")
 
-    # 삭제
+    was_active = bool(result.is_active)
+
+    # 2) 삭제
     db.delete(result)
     db.commit()
+
+    if was_active:
+        latest = (
+            db.query(PBTIResult)
+            .filter(PBTIResult.user_id == current_user_id_bytes)
+            .order_by(PBTIResult.created_at.desc())
+            .first()
+        )
+        if latest is not None:
+            latest.is_active = True
+            db.add(latest)
+            db.commit()
 
     return
