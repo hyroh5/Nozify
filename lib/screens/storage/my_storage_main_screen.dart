@@ -1,17 +1,20 @@
-// my—storage—main—screen。dart
+// lib/screens/storage/my_storage_main_screen.dart
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
 import '../../widgets/topbar/appbar_ver2.dart';
 import '../../widgets/bottom_navbar.dart';
+import '../../widgets/custom_drawer.dart';
 import '../home_screen.dart';
+
 import 'my_wishlist_screen.dart';
 import 'my_purchased_screen.dart';
 import 'my_calendar_screen.dart';
-import '../perfume_detail_screen.dart';
-import 'package:provider/provider.dart';
+
+import '../../providers/wishlist_provider.dart';
+import '../../providers/purchased_provider.dart';
 import '../../providers/calendar_provider.dart';
-import '../../providers/auth_provider.dart';
-import '../../providers/storage_manager.dart';
-import '../../widgets/custom_drawer.dart';
+import '../perfume_detail_screen.dart';
 
 class MyStorageMainScreen extends StatefulWidget {
   const MyStorageMainScreen({super.key});
@@ -21,25 +24,47 @@ class MyStorageMainScreen extends StatefulWidget {
 }
 
 class _MyStorageMainScreenState extends State<MyStorageMainScreen> {
-  int _selectedIndex = 3;
+  int _bottomIndex = 3;
 
-  List<Map<String, String>> wishlist = [];
-  List<Map<String, String>> purchased = [];
+  List<Map<String, String>> previewWish = [];
+  List<Map<String, String>> previewPurchased = [];
 
   @override
   void initState() {
     super.initState();
-    _loadStorage();
-  }
 
-  Future<void> _loadStorage() async {
-    final auth = context.read<AuthProvider>();
-    final email = auth.user?.email;
-    final wish = await StorageManager.loadList(StorageManager.wishlistKey, email ?? 'guest');
-    final buy = await StorageManager.loadList(StorageManager.purchasedKey, email ?? 'guest');
-    setState(() {
-      wishlist = wish;
-      purchased = buy;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final wishlistProvider = context.read<WishlistProvider>();
+      final purchasedProvider = context.read<PurchasedProvider>();
+      final calendarProvider = context.read<CalendarProvider>();
+
+      await wishlistProvider.fetchWishlist();
+      await purchasedProvider.fetchPurchased();
+      calendarProvider.loadFromStorage();
+
+      // ⭐ provider.items 로부터 미리보기 3개 추출
+      final wish = wishlistProvider.items.take(3).map((p) {
+        return {
+          "image": p.imageUrl ?? "assets/images/dummy.jpg",
+          "brand": p.brandName,
+          "name": p.name,
+          "id": p.perfumeId,
+        };
+      }).toList();
+
+      final bought = purchasedProvider.items.take(3).map((p) {
+        return {
+          "image": p.imageUrl ?? "assets/images/dummy.jpg",
+          "brand": p.brandName,
+          "name": p.name,
+          "id": p.perfumeId,
+        };
+      }).toList();
+
+      setState(() {
+        previewWish = wish;
+        previewPurchased = bought;
+      });
     });
   }
 
@@ -62,7 +87,7 @@ class _MyStorageMainScreenState extends State<MyStorageMainScreen> {
           children: [
             _buildSection(
               title: '내 위시리스트',
-              items: wishlist,
+              items: previewWish,
               onMore: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const MyWishlistScreen()),
@@ -71,7 +96,7 @@ class _MyStorageMainScreenState extends State<MyStorageMainScreen> {
             const SizedBox(height: 20),
             _buildSection(
               title: '내가 구매한 향수',
-              items: purchased,
+              items: previewPurchased,
               onMore: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const MyPurchasedScreen()),
@@ -83,9 +108,9 @@ class _MyStorageMainScreenState extends State<MyStorageMainScreen> {
         ),
       ),
       bottomNavigationBar: BottomNavBar(
-        currentIndex: _selectedIndex,
+        currentIndex: _bottomIndex,
         onTap: (index) {
-          setState(() => _selectedIndex = index);
+          setState(() => _bottomIndex = index);
           if (index == 0) {
             Navigator.pushReplacement(
               context,
@@ -97,7 +122,7 @@ class _MyStorageMainScreenState extends State<MyStorageMainScreen> {
     );
   }
 
-  // 📦 공통 섹션 (위시리스트, 구매)
+  // 📦 공통 섹션
   Widget _buildSection({
     required String title,
     required List<Map<String, String>> items,
@@ -120,9 +145,10 @@ class _MyStorageMainScreenState extends State<MyStorageMainScreen> {
             ),
           ],
         ),
+
         const SizedBox(height: 8),
 
-        // 카드 섹션 (3개 고정 + 상하 테두리)
+        // 카드 3개 프리뷰
         Container(
           decoration: const BoxDecoration(
             border: Border(
@@ -135,10 +161,9 @@ class _MyStorageMainScreenState extends State<MyStorageMainScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: List.generate(3, (i) {
               if (i < items.length) {
-                final perfume = items[i];
-                return _buildPerfumeCard(perfume);
+                return _buildPerfumeCard(items[i]);
               } else {
-                return const SizedBox(width: 100); // 빈칸 유지
+                return const SizedBox(width: 100);
               }
             }),
           ),
@@ -158,14 +183,17 @@ class _MyStorageMainScreenState extends State<MyStorageMainScreen> {
     );
   }
 
-  // 향수 카드 (MyWishlistScreen 스타일)
+  // 📷 향수 미리보기 카드
   Widget _buildPerfumeCard(Map<String, String> perfume) {
     return GestureDetector(
       onTap: () {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => const PerfumeDetailScreen(fromStorage: true),
+            builder: (_) => PerfumeDetailScreen(
+              perfumeId: perfume["id"]!,
+              fromStorage: true,
+            ),
           ),
         );
       },
@@ -176,8 +204,15 @@ class _MyStorageMainScreenState extends State<MyStorageMainScreen> {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             ClipRRect(
-              child: Image.asset(
-                perfume['image'] ?? 'assets/images/dummy.jpg',
+              child: perfume['image']!.startsWith('http')
+                  ? Image.network(
+                perfume['image']!,
+                height: 108,
+                width: 90,
+                fit: BoxFit.cover,
+              )
+                  : Image.asset(
+                perfume['image']!,
                 height: 108,
                 width: 90,
                 fit: BoxFit.cover,
@@ -193,8 +228,10 @@ class _MyStorageMainScreenState extends State<MyStorageMainScreen> {
             const SizedBox(height: 2),
             Text(
               perfume['name'] ?? '',
-              style:
-              const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 11,
+              ),
               textAlign: TextAlign.center,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -205,7 +242,7 @@ class _MyStorageMainScreenState extends State<MyStorageMainScreen> {
     );
   }
 
-  // 📅 캘린더 프리뷰 (한 달 요약 + 향수 기록 점)
+  // 📅 캘린더 프리뷰 (그대로)
   Widget _buildCalendarPreview(BuildContext context) {
     final calendar = context.watch<CalendarProvider>();
     final now = DateTime.now();
@@ -219,6 +256,7 @@ class _MyStorageMainScreenState extends State<MyStorageMainScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // 제목
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
@@ -236,7 +274,7 @@ class _MyStorageMainScreenState extends State<MyStorageMainScreen> {
         ),
         const SizedBox(height: 8),
 
-        // 캘린더 프리뷰
+        // 캘린더 박스
         Container(
           decoration: const BoxDecoration(
             border: Border(
@@ -247,7 +285,7 @@ class _MyStorageMainScreenState extends State<MyStorageMainScreen> {
           padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
           child: Column(
             children: [
-              // 요일 헤더
+              // 요일
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: const [
@@ -269,14 +307,16 @@ class _MyStorageMainScreenState extends State<MyStorageMainScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: List.generate(7, (c) {
                       final idx = r * 7 + c;
+
                       if (idx < startWeekday || idx >= totalCells) {
                         return const SizedBox(width: 28, height: 32);
                       }
+
                       final dayNum = idx - startWeekday + 1;
-                      final has = calendar.hasRecord(
+
+                      final hasRecord = calendar.hasRecord(
                         DateTime(now.year, now.month, dayNum),
                       );
-                      final dotColor = has ? Colors.grey : null;
 
                       return SizedBox(
                         width: 28,
@@ -292,12 +332,12 @@ class _MyStorageMainScreenState extends State<MyStorageMainScreen> {
                               ),
                             ),
                             const SizedBox(height: 2),
-                            if (dotColor != null)
+                            if (hasRecord)
                               Container(
                                 width: 6,
                                 height: 6,
-                                decoration: BoxDecoration(
-                                  color: dotColor,
+                                decoration: const BoxDecoration(
+                                  color: Colors.grey,
                                   shape: BoxShape.circle,
                                 ),
                               ),

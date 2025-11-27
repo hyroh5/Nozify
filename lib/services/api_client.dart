@@ -15,6 +15,9 @@ class ApiClient {
   Uri _uri(String path, [Map<String, dynamic>? query]) =>
       Uri.parse("${Env.baseUrl}${Env.apiPrefix}$path").replace(queryParameters: query);
 
+  /// 🔥 외부에서 호출 가능한 debug용 public 메서드 추가
+  Uri buildUri(String path, [Map<String, dynamic>? query]) => _uri(path, query);
+
   // 요청 헤더
   Future<Map<String, String>> _headers({bool auth = false}) async {
     final headers = <String, String>{"Content-Type": "application/json"};
