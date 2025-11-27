@@ -1,3 +1,4 @@
+// lib/models/perfume_simple.dart
 class PerfumeSimple {
   final String id;
   final String name;

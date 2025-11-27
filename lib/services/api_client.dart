@@ -1,8 +1,8 @@
 // lib/services/api_client.dart
 // 목적: Flutter에서 FastAPI 서버를 쉽게 호출하도록 만든 통합 HTTP 모듈
 
-import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config/env.dart';
 
@@ -64,5 +64,53 @@ class ApiClient {
     if (res.statusCode >= 400) {
       throw Exception("HTTP ${res.statusCode}: ${res.body}");
     }
+  }
+
+  // --------------------------------------------------
+  // 📸 Multipart 이미지 업로드용 POST
+  // --------------------------------------------------
+  Future<http.Response> postMultipart(
+      String path, {
+        Map<String, String>? fields,
+        required String fileField,
+        required String filePath,
+        bool auth = false,
+      }) async {
+    final uri = _uri(path);
+    final request = http.MultipartRequest('POST', uri);
+
+    // ❗ Content-Type 절대 추가하지 말기 (multipart 충돌)
+    if (auth) {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('access_token');
+      if (token != null) {
+        request.headers['Authorization'] = 'Bearer $token';
+      }
+    }
+
+    // text fields
+    if (fields != null) {
+      request.fields.addAll(fields);
+    }
+
+    // file field (🔥 서버 요구: "image")
+    final ext = filePath.toLowerCase();
+    final isPng = ext.endsWith('.png');
+
+    request.files.add(
+      await http.MultipartFile.fromPath(
+        'image',
+        filePath,
+        contentType: isPng
+            ? MediaType('image', 'png')
+            : MediaType('image', 'jpeg'),
+      ),
+    );
+
+    final streamedRes = await request.send();
+    final res = await http.Response.fromStream(streamedRes);
+
+    _throwOnError(res);
+    return res;
   }
 }
