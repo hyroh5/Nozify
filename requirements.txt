@@ -62,4 +62,3 @@ ultralytics
 
 paddleocr==2.9.1
 opencv-python>=4.8
-paddlepaddle==2.6.2
