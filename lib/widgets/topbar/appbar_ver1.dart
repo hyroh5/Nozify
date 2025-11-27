@@ -58,6 +58,7 @@ class _AppBarVer1State extends State<AppBarVer1> {
             offset: const Offset(0, 56),
             showWhenUnlinked: false,
             child: Material(
+              color: Colors.white,
               elevation: 4,
               borderRadius: BorderRadius.circular(10),
               child: ConstrainedBox(
@@ -120,6 +121,7 @@ class _AppBarVer1State extends State<AppBarVer1> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          const SizedBox(height: 12),
           // 로고 + 메뉴
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -134,7 +136,7 @@ class _AppBarVer1State extends State<AppBarVer1> {
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 0),
 
           // 검색창 (Overlay anchor)
           CompositedTransformTarget(

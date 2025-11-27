@@ -248,7 +248,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   height: 72,
                                   width: 72,
                                   fit: BoxFit.cover,
-                                  errorBuilder: (_, __, ___) => _dummy(),
+                                  errorBuilder: (_, __, ___) => _dummy2(),
                                 ),
                               ),
                               const SizedBox(height: 6),
@@ -521,6 +521,15 @@ class _HomeScreenState extends State<HomeScreen> {
       'assets/images/dummy.jpg',
       height: 120,
       width: 100,
+      fit: BoxFit.cover,
+    );
+  }
+
+  Widget _dummy2() {
+    return Image.asset(
+      'assets/images/dummy.jpg',
+      height: 72,
+      width: 72,
       fit: BoxFit.cover,
     );
   }
