@@ -103,16 +103,21 @@ class _CameraScreenState extends State<CameraScreen> {
       body: _isInitialized
           ? Stack(
         children: [
+          // FULL SCREEN CAMERA
+          Positioned.fill(
+            child: _isPreviewOff
+                ? Container(color: Colors.black)
+                : FittedBox(
+              fit: BoxFit.cover,
+              child: SizedBox(
+                width: _controller!.value.previewSize!.height,
+                height: _controller!.value.previewSize!.width,
+                child: CameraPreview(_controller!),
+              ),
+            ),
+          ),
 
-          if (!_isPreviewOff)
-            CameraPreview(_controller!)
-          else
-            Container(color: Colors.black),
-
-          // ✅ 카메라 미리보기
-          CameraPreview(_controller!),
-
-          // ✅ 상단 뒤로가기 버튼
+          // 뒤로가기 버튼
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.only(left: 8.0, top: 8.0),
@@ -129,7 +134,7 @@ class _CameraScreenState extends State<CameraScreen> {
             ),
           ),
 
-          // ✅ 중앙 흰색 네모 가이드라인
+          // 가이드 박스
           Align(
             alignment: Alignment.center,
             child: Container(
@@ -142,7 +147,7 @@ class _CameraScreenState extends State<CameraScreen> {
             ),
           ),
 
-          // ✅ 안내 문구
+          // 안내 문구
           Positioned(
             top: 200,
             left: 0,
@@ -159,7 +164,7 @@ class _CameraScreenState extends State<CameraScreen> {
             ),
           ),
 
-          // ✅ 하단 촬영 버튼
+          // 촬영 버튼
           Positioned(
             bottom: 60,
             left: 0,

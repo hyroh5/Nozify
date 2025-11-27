@@ -70,6 +70,7 @@ class _ResultScreenState extends State<ResultScreen> {
                   final name = perfume['product']?.toString() ?? '';
                   final perfumeId =
                       perfume['product_id']?.toString() ?? '';
+                  final imageUrl = perfume['image_url'].toString();
 
                   return Center(
                     child: SizedBox(
@@ -91,10 +92,14 @@ class _ResultScreenState extends State<ResultScreen> {
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             // 일단 썸네일은 더미 이미지로
-                            Image.asset(
-                              'assets/images/dummy.jpg',
-                              height: 210,
-                              fit: BoxFit.contain,
+                            ClipRRect(
+                              child: Image.network(
+                                imageUrl,
+                                height: 108,
+                                width: 90,
+                                fit: BoxFit.cover,
+                                // errorbuilder 안만들어짐..
+                              )
                             ),
                             const SizedBox(height: 20),
                             Text(
