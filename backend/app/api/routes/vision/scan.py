@@ -15,6 +15,7 @@ from app.services.vision.matcher import get_match
 router = APIRouter(tags=["vision"])
 
 
+
 def _roi_from_bbox(bbox, w, h):
     """
     탐지 bbox → OCR용 ROI 확보 + 패딩
@@ -182,6 +183,10 @@ async def scan(
             status_code=503,
             detail={"error": {"code": "OPENCV_LOAD_FAIL", "message": str(e)}},
         )
+
+    print("[SCAN] Received image:", image.filename, image.content_type)
+    print("[SCAN] Image length (bytes):", len(content))
+    print("[SCAN] Trying to decode image…")
 
     # ---------- 입력 검증 ----------
     if image.content_type not in ("image/jpeg", "image/png"):
@@ -429,3 +434,4 @@ async def scan(
         "request_id": request_id or "",
         "debug": {"redetect": redetected},
     }
+
