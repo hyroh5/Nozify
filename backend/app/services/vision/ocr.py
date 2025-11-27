@@ -1,114 +1,148 @@
 # backend/app/services/vision/ocr.py
-
-from functools import lru_cache
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Union
 import numpy as np
 
+from paddleocr import PaddleOCR
+
+from .utils import _load_cv2
 from app.core.config import VisionConfig
-from app.services.vision.utils import _load_cv2
+
+_ocr_engine: Optional[PaddleOCR] = None
 
 
-_ocr_engine = None
-
-
-def _get_ocr_engine():
+def _get_ocr_engine() -> PaddleOCR:
     """
-    PaddleOCR 엔진을 singleton 형태로 초기화해서 재사용.
+    PaddleOCR 엔진을 lazy-init 로드
     """
     global _ocr_engine
     if _ocr_engine is None:
-        from paddleocr import PaddleOCR
-
-        # VisionConfig.OCR_LANGS 에서 첫 번째 언어만 사용
-        raw_lang = (VisionConfig.OCR_LANGS or "en").split(",")[0].strip().lower()
-        # 환경에 eng라고 들어와도 PaddleOCR에서 인식하는 코드로 매핑
-        if raw_lang == "eng":
-            raw_lang = "en"
-        if raw_lang == "kor":
-            raw_lang = "korean"
-
-        print(f"[OCR] init PaddleOCR lang={raw_lang}")
-
-        # ⚠ 중요: use_gpu, show_log 같은 인자 절대 넣지 말 것
         _ocr_engine = PaddleOCR(
-            lang=raw_lang
-            # 필요하면 여기서만 천천히 옵션 늘리는 식으로
-            # det=True, rec=True, use_angle_cls=True 등
+            use_angle_cls=True,
+            lang="en",
+            use_gpu=False,
         )
-
     return _ocr_engine
 
 
+def _parse_roi(
+    roi: Union[Dict[str, float], List[float], tuple],
+    w: int,
+    h: int,
+) -> Optional[Dict[str, int]]:
+    """
+    roi 를 dict(x,y,w,h) 또는 (x, y, w, h) 튜플/리스트 둘 다 지원해서
+    실제 픽셀 좌표로 변환
+    """
+    if roi is None:
+        return None
 
-# ---------- 메인 OCR 함수 ----------
+    # dict 형태
+    if isinstance(roi, dict):
+        x_norm = float(roi.get("x", 0.0))
+        y_norm = float(roi.get("y", 0.0))
+        w_norm = float(roi.get("w", 1.0))
+        h_norm = float(roi.get("h", 1.0))
 
-def run_ocr(img_bgr, roi=None) -> List[Dict[str, Any]]:
+    # tuple/list 형태
+    elif isinstance(roi, (list, tuple)) and len(roi) == 4:
+        x_norm = float(roi[0])
+        y_norm = float(roi[1])
+        w_norm = float(roi[2])
+        h_norm = float(roi[3])
+    else:
+        # 이상한 형식이면 전체 이미지 사용
+        return None
+
+    x = int(x_norm * w)
+    y = int(y_norm * h)
+    rw = int(w_norm * w)
+    rh = int(h_norm * h)
+
+    x = max(0, min(x, w - 1))
+    y = max(0, min(y, h - 1))
+    rw = max(1, min(rw, w - x))
+    rh = max(1, min(rh, h - y))
+
+    return {"x": x, "y": y, "w": rw, "h": rh}
+
+
+def run_ocr(
+    img_bgr,
+    roi: Optional[Union[Dict[str, float], List[float], tuple]] = None,
+) -> List[Dict[str, Any]]:
+    """
+    img_bgr: BGR numpy array (H, W, 3)
+    roi: 정규화 좌표
+         - dict: {"x":0~1,"y":0~1,"w":0~1,"h":0~1}
+         - tuple/list: (x, y, w, h) in 0~1
+    """
     cv2 = _load_cv2()
     h, w = img_bgr.shape[:2]
-    print(f"[LOG][OCR] PaddleOCR 시작, ROI={roi if roi else '전체 이미지'}")
 
-    # ROI 크롭
-    if roi:
-        x, y, rw, rh = roi
-        crop = img_bgr[y:y+rh, x:x+rw]
+    roi_px = _parse_roi(roi, w, h) if roi is not None else None
+    if roi_px is not None:
+        x = roi_px["x"]
+        y = roi_px["y"]
+        rw = roi_px["w"]
+        rh = roi_px["h"]
+        crop = img_bgr[y:y + rh, x:x + rw]
     else:
-        x, y, rw, rh = 0, 0, w, h
+        x, y = 0, 0
         crop = img_bgr
 
-    # BGR -> RGB
-    img_rgb = cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)
-
     ocr = _get_ocr_engine()
-    # 결과 형식: [ [ [box, (text, score)], ... ] ]
-    result = ocr.ocr(img_rgb, cls=True)
+
+    # PaddleOCR 결과: 보통 [ [ [box, (text, score)], ... ] ] 형태
+    result = ocr.ocr(crop, cls=True)
 
     texts: List[Dict[str, Any]] = []
 
+    # None 이거나 비어있으면 바로 반환
     if not result:
-        print("[LOG][OCR] 결과 없음")
         return texts
 
-    for line in result[0]:
-        box, (txt, score) = line
-        # box: 4점 좌표 [(x1,y1), (x2,y2), (x3,y3), (x4,y4)]
-        xs = [p[0] for p in box]
-        ys = [p[1] for p in box]
-        bx0, by0 = min(xs), min(ys)
-        bx1, by1 = max(xs), max(ys)
+    # result 가 리스트가 아닌 형태로 올 가능성까지 방어
+    if isinstance(result, list) and len(result) > 0 and isinstance(result[0], list):
+        lines = result[0]
+    else:
+        # 구조가 예상과 다르면 전체를 lines 로 취급
+        lines = result
 
-        # ROI 좌표를 원본 좌표로 복원
-        abs_x0 = bx0 + x
-        abs_y0 = by0 + y
-        abs_x1 = bx1 + x
-        abs_y1 = by1 + y
+    for line in lines:
+        try:
+            box, (txt, score) = line  # box: 4x2, txt: str, score: float
+        except Exception:
+            # 구조가 다르면 스킵
+            continue
 
-        nx = clamp01(abs_x0 / w)
-        ny = clamp01(abs_y0 / h)
-        nw = clamp01((abs_x1 - abs_x0) / w)
-        nh = clamp01((abs_y1 - abs_y0) / h)
+        box = np.array(box, dtype=np.float32)
+
+        # crop 기준 → 원본 기준, 정규화
+        xs = (box[:, 0] + x) / w
+        ys = (box[:, 1] + y) / h
+
+        bx = float(xs.min())
+        by = float(ys.min())
+        bw = float(xs.max() - xs.min())
+        bh = float(ys.max() - ys.min())
 
         texts.append(
             {
-                "text": str(txt).upper(),
+                "text": txt,
                 "confidence": float(score),
-                "box": {"x": nx, "y": ny, "w": nw, "h": nh},
+                "box": {"x": bx, "y": by, "w": bw, "h": bh},
             }
         )
 
-    # 간단 중복 제거
-    dedup = {}
-    for r in texts:
-        key = (r["text"], round(r["box"]["x"], 3), round(r["box"]["y"], 3))
-        if key not in dedup or r["confidence"] > dedup[key]["confidence"]:
-            dedup[key] = r
-
-    texts = list(dedup.values())
-    print(f"[LOG][OCR] PaddleOCR 결과 토큰 수={len(texts)}, texts={texts}")
     return texts
 
-# ---------- 회전 OCR: Paddle 버전에서는 그냥 run_ocr 재사용 ----------
 
-def run_ocr_rotated(img_bgr, roi=None, angles=None):
-    # PaddleOCR 자체가 어느 정도 기울기 보정 / 각도 분류를 해주므로
-    # 별도로 회전 스캔하지 않고 동일 함수 재사용
+def run_ocr_rotated(
+    img_bgr,
+    roi: Optional[Union[Dict[str, float], List[float], tuple]] = None,
+) -> List[Dict[str, Any]]:
+    """
+    현재는 단순히 run_ocr 래핑.
+    나중에 회전까지 돌리고 싶으면 여기서 추가 구현.
+    """
     return run_ocr(img_bgr, roi=roi)
