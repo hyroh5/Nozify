@@ -130,18 +130,24 @@ class _HomeScreenState extends State<HomeScreen> {
                     ? const Center(child: CircularProgressIndicator())
                     : todayProvider.items.isEmpty
                     ? const Center(child: Text("오늘의 추천 향수를 불러오지 못했어요."))
-                    : ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: todayProvider.items.length,
-                  itemBuilder: (context, index) {
-                    final simple = PerfumeSimple(
-                      id: todayProvider.items[index].id,
-                      name: todayProvider.items[index].name,
-                      brandName: todayProvider.items[index].brandName,
-                      imageUrl: todayProvider.items[index].imageUrl,
-                    );
+                    : Builder(
+                  builder: (_) {
+                    final reversed = todayProvider.items.reversed.toList();
 
-                    return _buildPerfumeCard(simple);
+                    return ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: reversed.length,
+                      itemBuilder: (context, index) {
+                        final simple = PerfumeSimple(
+                          id: reversed[index].id,
+                          name: reversed[index].name,
+                          brandName: reversed[index].brandName,
+                          imageUrl: reversed[index].imageUrl,
+                        );
+
+                        return _buildPerfumeCard(simple);
+                      },
+                    );
                   },
                 ),
               ),
@@ -207,8 +213,9 @@ class _HomeScreenState extends State<HomeScreen> {
               // ⑤ 최근 본 향수 기반 추천 (로그인 시만)
               // =======================================================
               if (isLoggedIn) ...[
-                const SizedBox(height: 32),
+                const SizedBox(height: 12),
                 const HomeSectionTitle(title: "최근 본 향수"),
+                const SizedBox(height: 24),
 
                 // ----- 최근 본 향수 리스트 -----
                 SizedBox(
@@ -241,7 +248,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   height: 72,
                                   width: 72,
                                   fit: BoxFit.cover,
-                                  errorBuilder: (_, __, ___) => _dummy(),
+                                  errorBuilder: (_, __, ___) => _dummy2(),
                                 ),
                               ),
                               const SizedBox(height: 6),
@@ -259,7 +266,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
 
-                const SizedBox(height: 20),
+                const SizedBox(height: 12),
 
                 // ----- 유사 추천 리스트 -----
                 if (recentProvider.similarPerfumes.isNotEmpty) ...[
@@ -284,7 +291,7 @@ class _HomeScreenState extends State<HomeScreen> {
               // ④ PBTI 축 기반 추천 (로그인 + PBti 결과 있을 때)
               // =======================================================
               if (_pbtiAvailable) ...[
-                const SizedBox(height: 28),
+                const SizedBox(height: 12),
 
                 if (_isLoadingByType)
                   const Center(child: CircularProgressIndicator())
@@ -303,7 +310,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
 
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 48),
 
                   HomeSectionTitle(title: _reverseAxisLabel(_byType!.finalType)),
                   const SizedBox(height: 12),
@@ -518,6 +525,15 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Widget _dummy2() {
+    return Image.asset(
+      'assets/images/dummy.jpg',
+      height: 72,
+      width: 72,
+      fit: BoxFit.cover,
+    );
+  }
+
   // =======================================================
   // Occasion chips
   // =======================================================
@@ -585,4 +601,6 @@ String _reverseAxisLabel(String type) {
 
   return "$a3 & $a4 계열도 시도해보세요";
 }
+
+
 

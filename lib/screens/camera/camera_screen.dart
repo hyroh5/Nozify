@@ -1,3 +1,4 @@
+// lib/screens/camera/camera_screen.dart
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import '../home_screen.dart';
@@ -14,11 +15,20 @@ class _CameraScreenState extends State<CameraScreen> {
   CameraController? _controller;
   bool _isInitialized = false;
   bool _isCapturing = false;
+  bool _isPreviewOff = false;
+  bool _isDisposed = false;
 
   @override
   void initState() {
     super.initState();
     _initializeCamera();
+  }
+
+  @override
+  void dispose() {
+    _isDisposed = true;
+    _controller?.dispose();
+    super.dispose();
   }
 
   Future<void> _initializeCamera() async {
@@ -42,37 +52,48 @@ class _CameraScreenState extends State<CameraScreen> {
   }
 
   Future<void> _captureImage() async {
-    if (_controller == null || !_controller!.value.isInitialized || _isCapturing) return;
+
+    if (_controller == null ||
+        !_controller!.value.isInitialized ||
+        _isCapturing) return;
+
+    if (_isDisposed) return;
 
     setState(() => _isCapturing = true);
 
     try {
-      await _controller!.stopImageStream().catchError((_) {});
       final image = await _controller!.takePicture();
 
-      await _controller!.dispose();
-      _controller = null;
+      // 1) Preview 완전 제거
+      if (mounted) {
+        setState(() {
+          _isPreviewOff = true;
+        });
+      }
 
+      // 2) LG 기기 안정화 딜레이
+      await Future.delayed(const Duration(milliseconds: 250));
+
+      // 여기서 이미 화면이 dispose됐을 수도 있음 → 반드시 체크
       if (!mounted) return;
 
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => CameraLoadingScreen(imagePath: image.path),
-        ),
-      );
+      // 3) 안전하게 화면 이동
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return; // 이중 체크
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (_) => CameraLoadingScreen(imagePath: image.path),
+          ),
+        );
+      });
+
     } catch (e) {
       debugPrint("Capture error: $e");
     } finally {
-      _isCapturing = false;
+      if (mounted) {
+        setState(() => _isCapturing = false);
+      }
     }
-  }
-
-  @override
-  void dispose() {
-    _controller?.dispose();
-    _controller = null;
-    super.dispose();
   }
 
   @override
@@ -81,12 +102,22 @@ class _CameraScreenState extends State<CameraScreen> {
       backgroundColor: Colors.black,
       body: _isInitialized
           ? Stack(
-        fit: StackFit.expand,
         children: [
-          // ✅ 카메라 미리보기
-          CameraPreview(_controller!),
+          // FULL SCREEN CAMERA
+          Positioned.fill(
+            child: _isPreviewOff
+                ? Container(color: Colors.black)
+                : FittedBox(
+              fit: BoxFit.cover,
+              child: SizedBox(
+                width: _controller!.value.previewSize!.height,
+                height: _controller!.value.previewSize!.width,
+                child: CameraPreview(_controller!),
+              ),
+            ),
+          ),
 
-          // ✅ 상단 뒤로가기 버튼
+          // 뒤로가기 버튼
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.only(left: 8.0, top: 8.0),
@@ -103,7 +134,7 @@ class _CameraScreenState extends State<CameraScreen> {
             ),
           ),
 
-          // ✅ 중앙 흰색 네모 가이드라인
+          // 가이드 박스
           Align(
             alignment: Alignment.center,
             child: Container(
@@ -116,7 +147,7 @@ class _CameraScreenState extends State<CameraScreen> {
             ),
           ),
 
-          // ✅ 안내 문구
+          // 안내 문구
           Positioned(
             top: 200,
             left: 0,
@@ -133,7 +164,7 @@ class _CameraScreenState extends State<CameraScreen> {
             ),
           ),
 
-          // ✅ 하단 촬영 버튼
+          // 촬영 버튼
           Positioned(
             bottom: 60,
             left: 0,

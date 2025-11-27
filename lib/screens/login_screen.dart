@@ -87,76 +87,102 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32.0, vertical: 160),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('로그인', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 72),
-            CustomTextField(controller: emailController, hintText: '이메일'),
-            const SizedBox(height:24),
-            CustomTextField(controller: pwController, hintText: '비밀번호', obscureText: true),
-            const SizedBox(height: 4),
-            Row(
-              children: [
-                Checkbox(
-                  value: saveLogin,
-                  onChanged: (value) => setState(() => saveLogin = value!),
-                  activeColor: const Color(0xFF3C463A),
-                ),
-                const Text('로그인 정보 저장')
-              ],
-            ),
-            const SizedBox(height: 60),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF3C463A),
-                minimumSize: const Size(double.infinity, 48),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(30),
-                ),
+      resizeToAvoidBottomInset: true, // 키보드 대응
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: EdgeInsets.only(
+            left: 32,
+            right: 32,
+            top: 160,
+            bottom: MediaQuery.of(context).viewInsets.bottom, // 키보드 높이만큼 공간 확보
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                '로그인',
+                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
               ),
-              onPressed: _login,
-              child: const Text('로그인', style: TextStyle(color: Colors.white, fontSize: 16)),
-            ),
-            const SizedBox(height: 16),
-            Center(
-              child: GestureDetector(
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => const SignUpScreen()),
-                  );
-                },
-                child: RichText(
-                  text: TextSpan(
-                    style: const TextStyle(
-                      color: Colors.black87,
-                      fontSize: 12,
-                    ),
-                    children: [
-                      const TextSpan(text: '아직 계정이 없으신가요? '),
-                      TextSpan(
-                        text: '회원가입',
-                        style: const TextStyle(
-                          decoration: TextDecoration.underline,
-                          color: Colors.black,
-                        ),
-                        recognizer: TapGestureRecognizer()
-                          ..onTap = () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (context) => const SignUpScreen()),
-                            );
-                          },
-                      ),
-                    ],
+              const SizedBox(height: 72),
+
+              // 네 컨트롤러 그대로 사용
+              CustomTextField(
+                controller: emailController,
+                hintText: '이메일',
+              ),
+
+              const SizedBox(height: 24),
+
+              CustomTextField(
+                controller: pwController,
+                hintText: '비밀번호',
+                obscureText: true,
+              ),
+
+              const SizedBox(height: 4),
+
+              Row(
+                children: [
+                  Checkbox(
+                    value: saveLogin,
+                    onChanged: (value) => setState(() => saveLogin = value!),
+                    activeColor: const Color(0xFF3C463A),
                   ),
-                )
+                  const Text('로그인 정보 저장'),
+                ],
               ),
-            ),
-          ],
+
+              const SizedBox(height: 60),
+
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF3C463A),
+                  minimumSize: const Size(double.infinity, 48),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(30),
+                  ),
+                ),
+                onPressed: _login,
+                child: const Text(
+                  '로그인',
+                  style: TextStyle(color: Colors.white, fontSize: 16),
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              Center(
+                child: GestureDetector(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const SignUpScreen()),
+                    );
+                  },
+                  child: RichText(
+                    text: TextSpan(
+                      style: const TextStyle(
+                        color: Colors.black87,
+                        fontSize: 12,
+                      ),
+                      children: const [
+                        TextSpan(text: '아직 계정이 없으신가요? '),
+                        TextSpan(
+                          text: '회원가입',
+                          style: TextStyle(
+                            decoration: TextDecoration.underline,
+                            color: Colors.black,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 40),
+            ],
+          ),
         ),
       ),
     );

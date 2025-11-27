@@ -13,6 +13,7 @@ import 'providers/accord_provider.dart';
 import 'providers/today_recommendation_provider.dart';
 import 'providers/trending_provider.dart';
 import 'providers/recent_view_provider.dart';
+import 'providers/search_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -32,6 +33,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => PurchasedProvider()),
         ChangeNotifierProvider(create: (_) => RecentPerfumeProvider()),
         ChangeNotifierProvider(create: (_) => RecentViewProvider()),
+        ChangeNotifierProvider(create: (_) => SearchProvider()),
         ChangeNotifierProvider(create: (_) => TodayRecommendationProvider()),
         ChangeNotifierProvider(create: (_) => TrendingProvider()),
         ChangeNotifierProvider(create: (_) => WishlistProvider()),

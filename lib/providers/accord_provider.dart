@@ -20,7 +20,7 @@ class AccordProvider extends ChangeNotifier {
         "/catalog/perfumes",
         query: {
           "accords": accord,
-          "limit": (limit ?? 50).toString(),
+          "limit": limit.toString(),
         },
       );
 

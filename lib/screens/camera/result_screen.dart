@@ -1,4 +1,4 @@
-import 'dart:io';
+// lib/screens/camera/result_screen.dart
 import 'package:flutter/material.dart';
 import '../../widgets/topbar/appbar_ver2.dart';
 import '../../widgets/custom_drawer.dart';
@@ -7,8 +7,13 @@ import '../home_screen.dart';
 
 class ResultScreen extends StatefulWidget {
   final String imagePath;
+  final List<Map<String, dynamic>> candidates;  // 🔥 추가
 
-  const ResultScreen({super.key, required this.imagePath});
+  const ResultScreen({
+    super.key,
+    required this.imagePath,
+    required this.candidates,
+  });
 
   @override
   State<ResultScreen> createState() => _ResultScreenState();
@@ -18,29 +23,11 @@ class _ResultScreenState extends State<ResultScreen> {
   final PageController _pageController = PageController();
   int _currentPage = 0;
 
-  final List<Map<String, String>> dummyResults = [
-    {
-      'id': 'dummy001',
-      "brand": "브랜드 001",
-      "name": "향수 이름 001",
-      "image": "assets/images/dummy.jpg"
-    },
-    {
-      'id': 'dummy002',
-      "brand": "브랜드 002",
-      "name": "향수 이름 002",
-      "image": "assets/images/dummy.jpg"
-    },
-    {
-      'id': 'dummy003',
-      "brand": "브랜드 003",
-      "name": "향수 이름 003",
-      "image": "assets/images/dummy.jpg"
-    },
-  ];
-
   @override
   Widget build(BuildContext context) {
+    final results = widget.candidates;
+    final resultCount = results.length;
+
     return Scaffold(
       backgroundColor: const Color(0xFFBFBFBF),
       appBar: AppBarVer2(
@@ -59,7 +46,9 @@ class _ResultScreenState extends State<ResultScreen> {
           children: [
             const SizedBox(height: 20),
             Text(
-              '${dummyResults.length}개의 연관 상품이 검색되었습니다',
+              resultCount > 0
+                  ? '$resultCount개의 연관 상품이 검색되었습니다'
+                  : '연관 상품을 찾지 못했어요',
               style: const TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.bold,
@@ -69,12 +58,19 @@ class _ResultScreenState extends State<ResultScreen> {
 
             // 🔁 카드 슬라이더
             Expanded(
-              child: PageView.builder(
+              child: resultCount > 0
+                  ? PageView.builder(
                 controller: _pageController,
-                itemCount: dummyResults.length,
+                itemCount: resultCount,
                 onPageChanged: (i) => setState(() => _currentPage = i),
                 itemBuilder: (context, index) {
-                  final perfume = dummyResults[index];
+                  final perfume = results[index];
+
+                  final brand = perfume['brand']?.toString() ?? '';
+                  final name = perfume['product']?.toString() ?? '';
+                  final perfumeId =
+                      perfume['product_id']?.toString() ?? '';
+                  final imageUrl = perfume['image_url'].toString();
 
                   return Center(
                     child: SizedBox(
@@ -95,21 +91,27 @@ class _ResultScreenState extends State<ResultScreen> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Image.asset(
-                              perfume["image"]!,
-                              height: 210,
-                              fit: BoxFit.contain,
+                            // 일단 썸네일은 더미 이미지로
+                            ClipRRect(
+                              child: Image.network(
+                                imageUrl,
+                                height: 108,
+                                width: 90,
+                                fit: BoxFit.cover,
+                                // errorbuilder 안만들어짐..
+                              )
                             ),
                             const SizedBox(height: 20),
                             Text(
-                              perfume["brand"]!,
+                              brand,
                               style: const TextStyle(
                                 fontSize: 10,
                                 color: Colors.grey,
                               ),
                             ),
                             Text(
-                              perfume["name"]!,
+                              name,
+                              textAlign: TextAlign.center,
                               style: const TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
@@ -117,14 +119,14 @@ class _ResultScreenState extends State<ResultScreen> {
                             ),
                             const SizedBox(height: 60),
 
-                            // 🔥 수정된 부분: perfumeId 전달
                             ElevatedButton(
                               onPressed: () {
+                                // product_id를 그대로 PerfumeDetailScreen에 넘김
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
                                     builder: (_) => PerfumeDetailScreen(
-                                      perfumeId: perfume['id']!,
+                                      perfumeId: perfumeId,
                                       fromStorage: false,
                                     ),
                                   ),
@@ -155,30 +157,40 @@ class _ResultScreenState extends State<ResultScreen> {
                     ),
                   );
                 },
+              )
+                  : const Center(
+                child: Text(
+                  '다른 각도에서 다시 촬영해볼까요?',
+                  style: TextStyle(
+                    color: Colors.black87,
+                    fontSize: 14,
+                  ),
+                ),
               ),
             ),
 
             const SizedBox(height: 16),
 
             // ⭕ 페이지 인디케이터
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(
-                dummyResults.length,
-                    (i) => AnimatedContainer(
-                  duration: const Duration(milliseconds: 300),
-                  margin: const EdgeInsets.symmetric(horizontal: 4),
-                  width: _currentPage == i ? 10 : 6,
-                  height: 6,
-                  decoration: BoxDecoration(
-                    color: _currentPage == i
-                        ? Colors.white
-                        : const Color(0xFFFFFFFF).withOpacity(0.4),
-                    borderRadius: BorderRadius.circular(4),
+            if (resultCount > 0)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(
+                  resultCount,
+                      (i) => AnimatedContainer(
+                    duration: const Duration(milliseconds: 300),
+                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                    width: _currentPage == i ? 10 : 6,
+                    height: 6,
+                    decoration: BoxDecoration(
+                      color: _currentPage == i
+                          ? Colors.white
+                          : const Color(0xFFFFFFFF).withOpacity(0.4),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
                   ),
                 ),
               ),
-            ),
             const SizedBox(height: 20),
           ],
         ),
@@ -186,3 +198,4 @@ class _ResultScreenState extends State<ResultScreen> {
     );
   }
 }
+
