@@ -1,3 +1,4 @@
+# backend/app/api/routes/vision/scan.py
 from fastapi import APIRouter, File, UploadFile, HTTPException, Form
 from typing import Optional
 import json, traceback, time
@@ -5,7 +6,7 @@ import json, traceback, time
 import numpy as np
 
 from app.core.config import VisionConfig
-from app.services.vision.utils import decode_image, clamp01  # 좌표 보정용
+from app.services.vision.utils import decode_image, clamp01
 from app.services.vision.detector import get_detector
 from app.services.vision.ocr import run_ocr, run_ocr_rotated
 from app.services.vision.quality import calc_quality
@@ -15,34 +16,60 @@ router = APIRouter(tags=["vision"])
 
 
 def _roi_from_bbox(bbox, w, h):
-    """탐지 bbox → OCR용 ROI 라벨 중앙 띠 확보 + 패딩"""
+    """
+    탐지 bbox → OCR용 ROI 확보 + 패딩
+    [수정]: 탐지 실패 (무효한 bbox) 시 ROI를 이미지 중앙 전체(90%)로 확장
+    """
+    
+    # 1. 탐지 실패 여부 확인 (w나 h가 0인 경우)
+    if bbox["w"] <= 0.0 or bbox["h"] <= 0.0:
+        # [Fallback 로직 확장] 이미지 중앙 90% 영역을 ROI로 사용 (Full Scan에 가까움)
+        x = int(w * 0.05)
+        y = int(h * 0.05)
+        rw = int(w * 0.9)
+        rh = int(h * 0.9)
+        
+        rw = max(1, rw)
+        rh = max(1, rh)
+        
+        return (x, y, rw, rh)
+        
+    # 2. 탐지 성공 시 기존 로직 실행 (로직 동일)
+    
     x = int(bbox["x"] * w)
     y = int(bbox["y"] * h)
     rw = int(bbox["w"] * w)
     rh = int(bbox["h"] * h)
 
-    # 라벨 중앙 띠 확보 세로 최소 50퍼 확보
-    cy = y + rh // 2
-    target_h = max(int(0.5 * h), rh)
-    y = max(0, cy - target_h // 2)
+    target_h = max(int(0.7 * rh), 100) 
+    y_start = int(y + 0.1 * rh)
+    
+    y = max(0, y_start)
     rh = min(h - y, target_h)
-
-    # 패딩
-    pad_x = max(20, int(0.15 * w))
-    pad_y = max(20, int(0.10 * h))
+    
+    pad_x = max(20, int(0.15 * rw))
+    pad_y = max(10, int(0.15 * rh)) 
+    
     x = max(0, x - pad_x)
     y = max(0, y - pad_y)
     rw = min(w - x, rw + 2 * pad_x)
     rh = min(h - y, rh + 2 * pad_y)
+
+    rw = max(1, rw)
+    rh = max(1, rh)
+
     return (x, y, rw, rh)
 
-
 def _fallback_roi(w, h):
-    """탐지 실패 시 중앙부 백업 ROI"""
+    """
+    [수정] _roi_from_bbox 함수의 Fallback 로직이 이 함수를 대체하도록 했습니다. 
+    이 함수는 이제 사용되지 않거나, 내부적으로 _roi_from_bbox에 통합된 로직을 그대로 반환합니다.
+    """
+    # 원본 _fallback_roi를 유지하되, _roi_from_bbox의 Fallback 로직이 더 넓어 사용하지 않습니다.
     bw2 = int(w * 0.60)
     bh2 = int(h * 0.60)
     bx2 = (w - bw2) // 2
-    by2 = int(h * 0.20)  # 라벨 고려하여 위 여백
+    by2 = int(h * 0.20)
     bh2 = min(h - by2, bh2)
     return (bx2, by2, bw2, bh2)
 
@@ -140,7 +167,7 @@ def merge_texts_by_line(texts, y_tol: float = 0.02):
 @router.post("/scan")
 async def scan(
     image: UploadFile = File(...),
-    guide_box: Optional[str] = Form(None),  # JSON 문자열 {"x":..,"y":..,"w":..,"h":..}
+    guide_box: Optional[str] = Form(None),
     user_query: Optional[str] = Form(None),
     request_id: Optional[str] = Form(None),
 ):
@@ -148,7 +175,7 @@ async def scan(
 
     # 여기서만 cv2 로드 서버 부팅에서는 절대 로드하지 않음
     try:
-        import cv2  # noqa: F401
+        import cv2
     except Exception as e:
         print("[LOG][SCAN][ERROR] OpenCV import failed:", e)
         raise HTTPException(
@@ -223,12 +250,17 @@ async def scan(
 
     # ---------- ROI ----------
     area_ratio = det.get("area_ratio", 0.0)
-    if det["bbox"]["w"] > 0 and det["bbox"]["h"] > 0 and area_ratio >= 0.02:
+    # [수정] area_ratio 임계값을 0.02에서 0.005로 낮춰 저해상도 이미지의 작은 탐지 결과도 허용
+    if det["bbox"]["w"] > 0 and det["bbox"]["h"] > 0 and area_ratio >= 0.005: 
         roi = _roi_from_bbox(det["bbox"], w, h)
         print(f"[LOG][ROI] from detection bbox → roi={roi}, area_ratio={area_ratio:.4f}")
     else:
-        roi = _fallback_roi(w, h)
+        # _roi_from_bbox의 Fallback 로직(_bbox["w"] <= 0.0)이 이미 넓은 영역을 반환하도록 수정되었으므로,
+        # 탐지 실패 시 여기서도 해당 로직을 실행. _fallback_roi는 사용하지 않음.
+        roi_bbox_dummy = {"x": 0.0, "y": 0.0, "w": 0.0, "h": 0.0}
+        roi = _roi_from_bbox(roi_bbox_dummy, w, h)
         print(f"[LOG][ROI] fallback roi → roi={roi}, area_ratio={area_ratio:.4f}")
+
 
     # ---------- OCR ----------
     t_ocr0 = time.time()
@@ -241,14 +273,17 @@ async def scan(
         print("[LOG][OCR][ERROR]", e)
         traceback.print_exc()
         texts = []
-    t_ocr1 = time.time()
-
+    
     # ---------- 회전 OCR 보강 ----------
-    if len([t for t in texts if t.get("confidence", 0) >= 0.80]) < 3:
+    # [수정] run_ocr이 텍스트를 인식하지 못했거나(len(texts) == 0), 신뢰도 높은 텍스트가 부족하면 run_ocr_rotated 실행
+    if len(texts) == 0 or len([t for t in texts if t.get("confidence", 0) >= 0.80]) < 3:
         rot_texts = run_ocr_rotated(img, roi=roi)
         if rot_texts:
             texts = dedup_merge(texts, rot_texts)
             print(f"[LOG][OCR] rotated merge → {len(texts)} tokens")
+
+    t_ocr1 = time.time()
+
 
     # ---------- 텍스트 기반 재탐지 ----------
     redetected = False
@@ -300,7 +335,12 @@ async def scan(
                         redetected = True
                         roi = _roi_from_bbox(det["bbox"], w, h)
                         try:
+                            # [수정] 재탐지 후 OCR 재실행 시에도 회전 OCR을 포함시켜 완전한 재시도를 유도
                             texts = run_ocr(img, roi=roi)
+                            if len(texts) == 0 or len([t for t in texts if t.get("confidence", 0) >= 0.80]) < 3:
+                                rot_texts = run_ocr_rotated(img, roi=roi)
+                                if rot_texts:
+                                    texts = dedup_merge(texts, rot_texts)
                             print(f"[LOG][OCR] re-run after redetect: {len(texts)} tokens")
                         except Exception as e:
                             print("[LOG][OCR][ERROR] re-run:", e)
@@ -339,7 +379,8 @@ async def scan(
     has_box = (det["bbox"]["w"] > 0) and (det["bbox"]["h"] > 0)
     min_score = max(0.10, getattr(VisionConfig, "THRESH_BOTTLE_SCORE", 0.2) * 0.5)
     good_score = det["score"] >= min_score
-    good_area = det["area_ratio"] >= 0.02
+    # [수정] good_area 임계값을 0.02에서 0.005로 낮춰 탐지 실패 조건 완화
+    good_area = det["area_ratio"] >= 0.005 
     max_glare = getattr(VisionConfig, "MAX_GLARE", 0.92)
     good_quality = (
         quality["blur"] >= VisionConfig.MIN_BLUR

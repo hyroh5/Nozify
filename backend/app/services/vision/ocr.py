@@ -8,20 +8,32 @@ from .utils import _load_cv2
 from app.core.config import VisionConfig
 
 _ocr_engine: Optional[PaddleOCR] = None
+_ocr_engine_cls_false: Optional[PaddleOCR] = None 
 
-
-def _get_ocr_engine() -> PaddleOCR:
+def _get_ocr_engine(use_angle_cls: bool = True) -> PaddleOCR:
     """
-    PaddleOCR 엔진을 lazy-init 로드
+    PaddleOCR 엔진을 lazy-init 로드 및 use_angle_cls에 따라 엔진 분리
     """
-    global _ocr_engine
-    if _ocr_engine is None:
-        _ocr_engine = PaddleOCR(
-            use_angle_cls=True,
-            lang="en",
-            use_gpu=False,
-        )
-    return _ocr_engine
+    global _ocr_engine, _ocr_engine_cls_false
+    
+    if use_angle_cls:
+        if _ocr_engine is None:
+            _ocr_engine = PaddleOCR(
+                use_angle_cls=True, 
+                lang="en",
+                use_gpu=False,
+                show_log=False,
+            )
+        return _ocr_engine
+    else:
+        if _ocr_engine_cls_false is None:
+            _ocr_engine_cls_false = PaddleOCR(
+                use_angle_cls=False, 
+                lang="en",
+                use_gpu=False,
+                show_log=False,
+            )
+        return _ocr_engine_cls_false
 
 
 def _parse_roi(
@@ -30,34 +42,36 @@ def _parse_roi(
     h: int,
 ) -> Optional[Dict[str, int]]:
     """
-    roi 를 dict(x,y,w,h) 또는 (x, y, w, h) 튜플/리스트 둘 다 지원해서
-    실제 픽셀 좌표로 변환
+    roi 를 실제 픽셀 좌표로 변환
+    - dict 타입은 정규화 좌표 x, y, w, h 로 간주
+    - list, tuple 타입은 이미 픽셀 단위로 들어온 것으로 간주
     """
     if roi is None:
         return None
 
-    # dict 형태
+    # dict  타입  정규화 좌표로 간주
     if isinstance(roi, dict):
         x_norm = float(roi.get("x", 0.0))
         y_norm = float(roi.get("y", 0.0))
         w_norm = float(roi.get("w", 1.0))
         h_norm = float(roi.get("h", 1.0))
 
-    # tuple/list 형태
+        x = int(x_norm * w)
+        y = int(y_norm * h)
+        rw = int(w_norm * w)
+        rh = int(h_norm * h)
+
+    # list, tuple 타입  픽셀 좌표로 간주
     elif isinstance(roi, (list, tuple)) and len(roi) == 4:
-        x_norm = float(roi[0])
-        y_norm = float(roi[1])
-        w_norm = float(roi[2])
-        h_norm = float(roi[3])
+        x = int(roi[0])
+        y = int(roi[1])
+        rw = int(roi[2])
+        rh = int(roi[3])
+
     else:
-        # 이상한 형식이면 전체 이미지 사용
         return None
 
-    x = int(x_norm * w)
-    y = int(y_norm * h)
-    rw = int(w_norm * w)
-    rh = int(h_norm * h)
-
+    # 이미지 경계 안으로 클램프
     x = max(0, min(x, w - 1))
     y = max(0, min(y, h - 1))
     rw = max(1, min(rw, w - x))
@@ -66,60 +80,29 @@ def _parse_roi(
     return {"x": x, "y": y, "w": rw, "h": rh}
 
 
-def run_ocr(
-    img_bgr,
-    roi: Optional[Union[Dict[str, float], List[float], tuple]] = None,
-) -> List[Dict[str, Any]]:
-    """
-    img_bgr: BGR numpy array (H, W, 3)
-    roi: 정규화 좌표
-         - dict: {"x":0~1,"y":0~1,"w":0~1,"h":0~1}
-         - tuple/list: (x, y, w, h) in 0~1
-    """
-    cv2 = _load_cv2()
-    h, w = img_bgr.shape[:2]
 
-    roi_px = _parse_roi(roi, w, h) if roi is not None else None
-    if roi_px is not None:
-        x = roi_px["x"]
-        y = roi_px["y"]
-        rw = roi_px["w"]
-        rh = roi_px["h"]
-        crop = img_bgr[y:y + rh, x:x + rw]
-    else:
-        x, y = 0, 0
-        crop = img_bgr
-
-    ocr = _get_ocr_engine()
-
-    # PaddleOCR 결과: 보통 [ [ [box, (text, score)], ... ] ] 형태
-    result = ocr.ocr(crop, cls=True)
-
+def _process_ocr_result(result, w, h, x_offset, y_offset) -> List[Dict[str, Any]]:
+    """OCR 결과 구조를 통일하고, 좌표를 원본 이미지 기준으로 정규화"""
     texts: List[Dict[str, Any]] = []
 
-    # None 이거나 비어있으면 바로 반환
     if not result:
         return texts
 
-    # result 가 리스트가 아닌 형태로 올 가능성까지 방어
+    lines = []
     if isinstance(result, list) and len(result) > 0 and isinstance(result[0], list):
         lines = result[0]
     else:
-        # 구조가 예상과 다르면 전체를 lines 로 취급
         lines = result
 
     for line in lines:
         try:
-            box, (txt, score) = line  # box: 4x2, txt: str, score: float
+            box, (txt, score) = line
         except Exception:
-            # 구조가 다르면 스킵
             continue
 
         box = np.array(box, dtype=np.float32)
-
-        # crop 기준 → 원본 기준, 정규화
-        xs = (box[:, 0] + x) / w
-        ys = (box[:, 1] + y) / h
+        xs = (box[:, 0] + x_offset) / w
+        ys = (box[:, 1] + y_offset) / h
 
         bx = float(xs.min())
         by = float(ys.min())
@@ -133,8 +116,54 @@ def run_ocr(
                 "box": {"x": bx, "y": by, "w": bw, "h": bh},
             }
         )
-
     return texts
+
+
+def _apply_clahe(crop_img):
+    """[추가] CLAHE 대비 보정 전처리 적용"""
+    cv2 = _load_cv2()
+    if crop_img is None or crop_img.size == 0:
+        return None
+        
+    gray = cv2.cvtColor(crop_img, cv2.COLOR_BGR2GRAY)
+    try:
+        # CLAHE (Adaptive Histogram Equalization) 적용
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        enhanced_gray = clahe.apply(gray)
+    except Exception:
+        enhanced_gray = gray
+    
+    return cv2.cvtColor(enhanced_gray, cv2.COLOR_GRAY2BGR)
+
+
+def run_ocr(
+    img_bgr,
+    roi: Optional[Union[Dict[str, float], List[float], tuple]] = None,
+) -> List[Dict[str, Any]]:
+    
+    cv2 = _load_cv2()
+    h, w = img_bgr.shape[:2]
+
+    roi_px = _parse_roi(roi, w, h) if roi is not None else None
+    if roi_px is not None:
+        x, y = roi_px["x"], roi_px["y"]
+        rw, rh = roi_px["w"], roi_px["h"]
+        crop = img_bgr[y:y + rh, x:x + rw]
+    else:
+        x, y = 0, 0
+        crop = img_bgr
+
+    # [수정] OCR 인식률 향상을 위한 이미지 전처리 (대비 보정)
+    img_ocr_input = _apply_clahe(crop)
+    if img_ocr_input is None:
+        return []
+
+    # [수정] use_angle_cls=False 엔진 사용
+    ocr = _get_ocr_engine(use_angle_cls=False)
+
+    result = ocr.ocr(img_ocr_input, cls=False)
+
+    return _process_ocr_result(result, w, h, x, y)
 
 
 def run_ocr_rotated(
@@ -142,7 +171,76 @@ def run_ocr_rotated(
     roi: Optional[Union[Dict[str, float], List[float], tuple]] = None,
 ) -> List[Dict[str, Any]]:
     """
-    현재는 단순히 run_ocr 래핑.
-    나중에 회전까지 돌리고 싶으면 여기서 추가 구현.
+    [수정] 이미지 90도 회전 후 OCR을 실행하여 누워있는 텍스트 인식률 보강
     """
-    return run_ocr(img_bgr, roi=roi)
+    cv2 = _load_cv2()
+    h, w = img_bgr.shape[:2]
+    
+    # 1. ROI 크롭
+    roi_px = _parse_roi(roi, w, h) if roi is not None else None
+    if roi_px is not None:
+        x, y = roi_px["x"], roi_px["y"]
+        rw, rh = roi_px["w"], roi_px["h"]
+        crop = img_bgr[y:y + rh, x:x + rw]
+    else:
+        x, y = 0, 0
+        crop = img_bgr
+
+    if crop.size == 0:
+        return []
+
+    # 2. 90도 시계방향 회전 이미지 생성
+    crop_90 = cv2.rotate(crop, cv2.ROTATE_90_CLOCKWISE)
+
+    # 3. 90도 회전 이미지에 전처리 적용
+    img_ocr_input_90 = _apply_clahe(crop_90)
+    if img_ocr_input_90 is None:
+        return []
+
+    # 4. OCR 실행 (use_angle_cls=False 엔진 사용)
+    ocr = _get_ocr_engine(use_angle_cls=False)
+    result_90 = ocr.ocr(img_ocr_input_90, cls=False) 
+
+    # 5. 결과 정리 및 좌표 변환
+    texts_90 = []
+    
+    w_rot, h_rot = crop_90.shape[1], crop_90.shape[0] 
+
+    lines = []
+    if isinstance(result_90, list) and len(result_90) > 0 and isinstance(result_90[0], list):
+        lines = result_90[0]
+    else:
+        lines = result_90
+
+    for line in lines:
+        try:
+            box, (txt, score) = line
+        except Exception:
+            continue
+        
+        box_np = np.array(box, dtype=np.float32)
+        xs_rot = box_np[:, 0]
+        ys_rot = box_np[:, 1]
+        
+        # 90도 시계방향 회전된 좌표를 원본 crop 좌표계로 변환
+        x_orig_crop = ys_rot
+        y_orig_crop = w_rot - xs_rot
+        
+        # 원본 이미지 정규화 좌표
+        xs = (x_orig_crop + x) / w
+        ys = (y_orig_crop + y) / h
+
+        bx = float(xs.min())
+        by = float(ys.min())
+        bw = float(xs.max() - xs.min())
+        bh = float(ys.max() - ys.min())
+
+        texts_90.append(
+            {
+                "text": txt,
+                "confidence": float(score),
+                "box": {"x": bx, "y": by, "w": bw, "h": bh},
+            }
+        )
+            
+    return texts_90

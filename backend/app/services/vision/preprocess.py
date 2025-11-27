@@ -10,7 +10,7 @@ def letterbox(img, new_shape=(640, 640), color=(114, 114, 114)):
     scale = min(new_shape[0] / h, new_shape[1] / w)
     nh, nw = int(h * scale), int(w * scale)
 
-    img_resized = cv2.resize(img, (nw, nh), interpolation=cv2.INTER_LINEAR)
+    img_resized = cv2.resize(img, (nw, nh), interpolation=cv2.INTER_CUBIC)
 
     top = (new_shape[0] - nh) // 2
     left = (new_shape[1] - nw) // 2
