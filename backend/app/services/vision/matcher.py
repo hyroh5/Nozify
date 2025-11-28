@@ -48,13 +48,12 @@ def _load_from_db() -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
             bid = p.brand_id.hex() if isinstance(p.brand_id, (bytes, bytearray)) else str(p.brand_id)
             name = p.name or ""
 
+            
             aliases = [name]
-            if getattr(p, "brand_name", None):
-                aliases.append(p.brand_name)
+
             if getattr(p, "concentration", None):
                 aliases.append(p.concentration)
 
-            # 1) 이미지 URL 가져오기 (컬럼명이 다르면 여기만 바꾸면 됨)
             image_url = getattr(p, "image_url", None)
 
             product_dicts.append(
@@ -63,9 +62,10 @@ def _load_from_db() -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
                     "brand_id": bid,
                     "name": name,
                     "aliases": aliases,
-                    "image_url": image_url,   # ← 추가
+                    "image_url": image_url,
                 }
             )
+
 
 
         print(f"[LOG][MATCH][INIT] loaded brands={len(brand_dicts)}, perfumes={len(product_dicts)}")
@@ -124,10 +124,6 @@ def tokenize(s: str) -> List[str]:
 # ---------- 점수 계산 ----------
 
 def _max_alias_score(aliases: List[str], text_tokens: List[str]) -> float:
-    """
-    alias 리스트와 OCR 토큰들의 유사도 중 최대값을 반환
-    RapidFuzz partial_ratio 기반, [0.0, 1.0] 범위
-    """
     best = 0.0
     joined = " ".join(text_tokens)
     for a in aliases:
@@ -162,7 +158,7 @@ def match_product(
         alias_list = p.get("aliases", [p["name"]])
         base = 0.0
 
-        # 기본: OCR 토큰과의 부분 일치
+        # OCR 토큰과의 부분 일치
         for a in alias_list:
             a_norm = normalize_text(a)
             base = max(base, fuzz.partial_ratio(a_norm, joined) / 100.0)
@@ -186,16 +182,56 @@ def match_product(
     return results[:3]
 
 
+def match_product_any_brand(
+    text_tokens: List[str],
+    user_query_tokens: List[str],
+) -> List[Tuple[Dict[str, Any], float]]:
+    """
+    브랜드를 모를 때 전체 향수(_PRODUCTS)에서 바로 매칭하는 fallback.
+    """
+    joined = " ".join(text_tokens)
+    jq = " ".join(user_query_tokens) if user_query_tokens else ""
+    results: List[Tuple[Dict[str, Any], float]] = []
+
+    for p in _PRODUCTS:
+        alias_list = p.get("aliases", [p["name"]])
+        base = 0.0
+
+        for a in alias_list:
+            a_norm = normalize_text(a)
+            base = max(base, fuzz.partial_ratio(a_norm, joined) / 100.0)
+
+        if jq:
+            for a in alias_list:
+                a_norm = normalize_text(a)
+                uq_score = fuzz.partial_ratio(a_norm, jq) / 100.0
+                base = max(base, 0.9 * base + 0.1 * uq_score)
+
+        name_tokens = tokenize(p["name"])
+        for k in _CONC_KEYWORDS:
+            if k in text_tokens and k in name_tokens:
+                base += 0.05
+
+        results.append((p, min(base, 1.0)))
+
+    results.sort(key=lambda x: (-x[1], x[0]["name"]))
+    return results[:10]  # 전체 중 상위 10개까지만
+
+
+def dedup_candidates(cands):
+    seen = set()
+    result = []
+    for c in cands:
+        pid = c["product_id"]
+        if pid not in seen:
+            seen.add(pid)
+            result.append(c)
+    return result
+
+
 # ---------- 엔트리 포인트 ----------
 
 def get_match(texts: List[Dict[str, Any]], user_query: str = "") -> Dict[str, Any]:
-    """
-    OCR 결과(texts)와 optional user_query를 받아
-    - 브랜드 후보 점수
-    - 각 브랜드별 향수 후보 점수
-    를 계산하고,
-    score 내림차순으로 정렬된 상위 후보와 최종 선택 1개를 반환한다.
-    """
     print(f"[LOG][MATCH] 입력 텍스트={texts}, user_query={user_query}")
 
     # OCR 토큰 합치기
@@ -207,46 +243,61 @@ def get_match(texts: List[Dict[str, Any]], user_query: str = "") -> Dict[str, An
         print("[LOG][MATCH] no OCR tokens")
         return {"final": None, "candidates": []}
 
-    # 1) 브랜드 후보
-    brand_cands = match_brand(ocr_tokens)
-    if not brand_cands or brand_cands[0][1] < 0.7:
-        # 브랜드가 전혀 안 맞으면 아직은 매칭 실패로 처리
-        # 필요하면 여기서 '브랜드 무시하고 전체 향수에서 매칭' fallback 추가 가능
-        print("[LOG][MATCH] no reliable brand candidate")
-        return {"final": None, "candidates": []}
-
     user_tokens = tokenize(user_query) if user_query else []
 
-    # 2) 상위 브랜드 1~2개에서 제품 후보 뽑기
+    # 1) 브랜드 후보
+    brand_cands = match_brand(ocr_tokens)
     prod_candidates: List[Dict[str, Any]] = []
-    for b, bscore in brand_cands[:2]:
-        prods = match_product(b["id"], ocr_tokens, user_tokens)
-        for p, pscore in prods:
-            final_score = 0.3 * bscore + 0.6 * pscore + 0.1 * (1.0 if user_tokens else 0.0)
 
+    # 브랜드가 충분히 신뢰할 만하면 기존 로직
+    if brand_cands and brand_cands[0][1] >= 0.7:
+        for b, bscore in brand_cands[:2]:
+            prods = match_product(b["id"], ocr_tokens, user_tokens)
+            for p, pscore in prods:
+                final_score = 0.3 * bscore + 0.6 * pscore + 0.1 * (1.0 if user_tokens else 0.0)
+                prod_candidates.append(
+                    {
+                        "brand": b["name"],
+                        "brand_id": b["id"],
+                        "product": p["name"],
+                        "product_id": p["id"],
+                        "score": round(min(final_score, 1.0), 3),
+                        "image_url": p.get("image_url"),
+                    }
+                )
+    else:
+        # 2) 브랜드가 안 잡히면 → 전체 향수에서 fallback 매칭
+        print("[LOG][MATCH] no reliable brand → product-only fallback")
+        prods = match_product_any_brand(ocr_tokens, user_tokens)
+        for p, pscore in prods:
+            bid = p["brand_id"]
+            b = _BRAND_BY_ID.get(bid)
+            bname = b["name"] if b else ""
             prod_candidates.append(
                 {
-                    "brand": b["name"],
-                    "brand_id": b["id"],
+                    "brand": bname,
+                    "brand_id": bid,
                     "product": p["name"],
                     "product_id": p["id"],
-                    "score": round(min(final_score, 1.0), 3),
-                    # 2) 여기서 image_url을 그대로 흘려보냄
+                    "score": round(pscore, 3),
                     "image_url": p.get("image_url"),
                 }
             )
 
-
+    # 정렬 + 중복 제거
     prod_candidates.sort(key=lambda x: (-x["score"], x["product"]))
+    prod_candidates = dedup_candidates(prod_candidates)
+    top_candidates = prod_candidates[:3]
+
     final = (
-        prod_candidates[0]
-        if (prod_candidates and prod_candidates[0]["score"] >= VisionConfig.THRESH_TEXT_MATCH)
+        top_candidates[0]
+        if (top_candidates and top_candidates[0]["score"] >= VisionConfig.THRESH_TEXT_MATCH)
         else None
     )
 
-    print(f"[LOG][MATCH] 최종 매칭 결과={final}, 후보군={prod_candidates[:3]}")
+    print(f"[LOG][MATCH] 최종 매칭 결과={final}, 후보군={top_candidates}")
 
     return {
         "final": final,
-        "candidates": prod_candidates[:3],
+        "candidates": top_candidates,
     }
